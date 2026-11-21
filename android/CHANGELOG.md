@@ -1,5 +1,11 @@
 # Changelog — Android app
 
+## 1.4.1 — 2026-11-21
+
+### Changed
+- The icons at the top right of the notes list (Search, view, sort, more) and of a reminder (Edit, Delete, Favorite) sit together as one connected button group.
+- Built against the latest Compose libraries.
+
 ## 1.4.0 — 2026-11-19
 
 ### Added
