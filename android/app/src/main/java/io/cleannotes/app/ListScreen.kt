@@ -83,6 +83,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -112,11 +115,14 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NoteList(
     app: App,
@@ -346,15 +352,18 @@ fun NoteList(
                                 if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search") }
                                 return@TopAppBar
                             }
-                            IconButton(onClick = { searching = true }) { Icon(Icons.Default.Search, "Search") }
-                            if (view !in listOf("daily", "tasks", "reminders", "pdfs")) IconButton(onClick = {
+                            val layout = view !in listOf("daily", "tasks", "reminders", "pdfs")
+                            val n = if (layout) 4 else 2
+                            Row(Modifier.padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) { CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                            FilledTonalIconButton(onClick = { searching = true }, connectedShapes(0, n)) { Icon(Icons.Default.Search, "Search") }
+                            if (layout) FilledTonalIconButton(onClick = {
                                 grid = !grid
                                 ui.edit { putBoolean("grid", grid) }
-                            }) {
+                            }, connectedShapes(1, n)) {
                                 Icon(painterResource(if (grid) R.drawable.ic_list else R.drawable.ic_layout_grid), if (grid) "List view" else "Grid view", Modifier.size(22.dp))
                             }
-                            if (view !in listOf("daily", "tasks", "reminders", "pdfs")) Box {
-                                IconButton(onClick = { sorting = true }) { Icon(painterResource(R.drawable.ic_arrow_down_up), "Sort by", Modifier.size(22.dp)) }
+                            if (layout) Box {
+                                FilledTonalIconButton(onClick = { sorting = true }, connectedShapes(2, n)) { Icon(painterResource(R.drawable.ic_arrow_down_up), "Sort by", Modifier.size(22.dp)) }
                                 Menu(sorting, { sorting = false }) {
                                     listOf(Triple("updated", "Last edited", R.drawable.ic_clock), Triple("created", "Date created", R.drawable.ic_calendar_plus), Triple("title", "Title", R.drawable.ic_arrow_down_a_z)).forEach { (key, label, icon) ->
                                         MenuItem(label, {
@@ -365,7 +374,8 @@ fun NoteList(
                                     }
                                 }
                             }
-                            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
+                            Box {
+                            FilledTonalIconButton(onClick = { menu = true }, connectedShapes(n - 1, n)) { Icon(Icons.Default.MoreVert, "More") }
                             Menu(menu, { menu = false }) {
                                 if (tag != null) {
                                     MenuItem("Rename tag", { menu = false; renamingTag = true }, R.drawable.ic_pencil)
@@ -375,9 +385,11 @@ fun NoteList(
                                     MenuItem("Rename notebook", { menu = false; naming = current }, R.drawable.ic_pencil)
                                     MenuItem("Delete notebook", { menu = false; deleting = current }, R.drawable.ic_trash)
                                 }
-                                if (view !in listOf("daily", "tasks", "reminders", "pdfs")) MenuItem("Select", { menu = false; selected = emptyList() }, R.drawable.ic_square_check)
+                                if (layout) MenuItem("Select", { menu = false; selected = emptyList() }, R.drawable.ic_square_check)
                                 MenuItem("Settings", { menu = false; onView("settings") }, R.drawable.ic_settings_2)
                             }
+                            }
+                            } }
                         },
                     )
                 },

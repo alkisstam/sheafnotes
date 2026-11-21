@@ -27,6 +27,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconButtonShapes
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.ShapeDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,7 +75,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -102,7 +112,7 @@ fun ReminderScreen(app: App, id: String?, attach: String?, task: Pair<String, St
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ReminderForm(
     app: App, id: String?, attach: String?, task: Pair<String, String>?, onClose: () -> Unit, onOpenNote: (String) -> Unit,
@@ -221,26 +231,32 @@ private fun ReminderForm(
     )
     Box(Modifier.noteBounds(LocalOpenFrom.current.value.takeIf { it.startsWith("rem:") }, 0.dp).fillMaxSize().background(MaterialTheme.colorScheme.background).systemBarsPadding().imePadding()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.End) {
-                if (ro) IconButton(onClick = { onEdit?.invoke(true, false) }) {
+            val canDelete = id != null || task != null && todo?.remind != null
+            val count = listOf(ro, canDelete, task == null).count { it }
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween, Alignment.End),
+            ) { CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                var i = 0
+                if (ro) FilledTonalIconButton(onClick = { onEdit?.invoke(true, false) }, connectedShapes(i++, count)) {
                     Icon(painterResource(R.drawable.ic_pencil), "Edit reminder")
                 }
-                if (id != null || task != null && todo?.remind != null) IconButton(onClick = { askDelete = true }) {
+                if (canDelete) FilledTonalIconButton(onClick = { askDelete = true }, connectedShapes(i++, count)) {
                     Icon(painterResource(R.drawable.ic_trash), if (id != null) "Move reminder to Trash" else "Remove reminder")
                 }
                 // To-dos have no favorite flag of their own.
-                if (task == null) IconButton(onClick = {
+                if (task == null) FilledTonalIconButton(onClick = {
                     favorite = !favorite
                     val fav = favorite
                     if (ro && id != null) app.scope.launch { app.updateNote(id) { n, _ -> n.put("favorite", fav) } }
-                }) {
+                }, connectedShapes(i, count)) {
                     Icon(
                         painterResource(if (favorite) R.drawable.ic_star_filled else R.drawable.ic_star),
                         if (favorite) "Remove from favorites" else "Add to favorites",
-                        tint = if (favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        tint = if (favorite) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                     )
                 }
-            }
+            } }
             Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(Modifier.padding(8.dp)) {
                     TextField(
@@ -367,3 +383,13 @@ private fun Option(icon: Int, label: String, open: Boolean, dim: Boolean = false
             color = if (open) MaterialTheme.colorScheme.primary else if (dim) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
         )
     }
+
+/** Shapes for button [i] of [n] in a connected group: round outer corners, small inner ones. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun connectedShapes(i: Int, n: Int): IconButtonShapes = when {
+    n == 1 -> IconButtonDefaults.shapes()
+    i == 0 -> IconButtonDefaults.shapes(ButtonGroupDefaults.connectedLeadingButtonShape, ButtonGroupDefaults.connectedLeadingButtonPressShape)
+    i == n - 1 -> IconButtonDefaults.shapes(ButtonGroupDefaults.connectedTrailingButtonShape, ButtonGroupDefaults.connectedTrailingButtonPressShape)
+    else -> IconButtonDefaults.shapes(ShapeDefaults.Small, ButtonGroupDefaults.connectedMiddleButtonPressShape)
+}
