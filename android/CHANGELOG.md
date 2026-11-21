@@ -1,5 +1,17 @@
 # Changelog — Android app
 
+## 1.5.0 — 2026-11-21
+
+### Added
+- Today lists the reminders due on the picked day under its daily note.
+- Long-press the daily note for its menu (background color, reminder, share, export, trash), or a reminder to complete, favorite or delete it.
+- The calendar marks days that have a reminder still to do.
+
+### Changed
+- Tapping a date in the calendar picks it instead of opening its note; tap the note below to open it. Browsing dates no longer creates empty notes.
+- Today shows only the picked day's note instead of every daily note.
+- A daily note's menu no longer offers Pin, Archive or moving it, as on the web.
+
 ## 1.4.1 — 2026-11-21
 
 ### Changed

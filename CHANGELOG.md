@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 — 2026-11-21
+
+### Added
+- Today lists the reminders due on the picked day under its daily note. Right-click one to complete, favorite or delete it.
+- The calendar marks days that have a reminder still to do.
+
+### Changed
+- Today shows only the picked day's note under the calendar instead of every daily note.
+
 ## 1.2.0 — 2026-11-19
 
 ### Added
