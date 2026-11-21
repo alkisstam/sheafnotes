@@ -2,7 +2,13 @@ package io.cleannotes.app
 
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,36 +55,87 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
-/** The Daily notes page: the web's calendar on top, then daily notes newest first. A tapped day opens its note. */
+/** The Daily notes page: the web's calendar on top, then the picked day's note and the reminders due that day. */
 @Composable
-fun DailyBody(app: App, all: List<NoteRow>, onOpen: (String) -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+fun DailyBody(
+    app: App, all: List<NoteRow>, colors: Map<String, String>, dailyDay: MutableState<String>, onOpen: (String) -> Unit, onEdit: (String) -> Unit,
+    onEditTask: (noteId: String, taskId: String) -> Unit, onRemindNote: (String) -> Unit,
+) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val exportNotes = rememberNoteExporter(app)
     val today = dateKey()
-    val open = { key: String -> scope.launch { onOpen(app.dailyNote(key)) } }
-    val withNotes = remember(all) { all.filter { it.kind == "daily" && it.text.isNotBlank() }.mapNotNull { it.date }.toSet() }
-    val notes = listFor("daily", all, today)
+    var day by dailyDay
+    val reminders = remember(all) { reminderItems(all) }
+    val dayReminders = remember(reminders, day) { reminders.filter { it.at.toLocalDate().toString() == day }.sortedBy { it.at } }
+    val marked = remember(all, reminders) {
+        all.filter { it.kind == "daily" && it.trashedAt == null && it.text.isNotBlank() }.mapNotNull { it.date }.toSet() +
+            reminders.filter { !it.done }.map { it.at.toLocalDate().toString() }
+    }
+    val note = all.firstOrNull { it.kind == "daily" && it.date == day && it.trashedAt == null }
     val from = LocalOpenFrom.current
-    LazyColumn(Modifier.fillMaxSize()) {
-        item { Calendar(today, withNotes) { open(it) } }
-        items(notes, key = { it.id }) { note ->
-            Column(Modifier.fillMaxWidth().noteBounds("${note.id}|daily", 0.dp).background(MaterialTheme.colorScheme.background).clickable { from.value = "${note.id}|daily"; onOpen(note.id) }.padding(16.dp, 12.dp)) {
-                Text(note.title.ifBlank { "Untitled" }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
+        item { Calendar(today, day, marked) { day = it } }
+        item(key = "note:$day") {
+            var pressed by remember { mutableStateOf(false) }
+            Column(
+                Modifier.fillMaxWidth().noteBounds("${note?.id}|daily", 0.dp).background(MaterialTheme.colorScheme.background).combinedClickable(
+                    onClick = {
+                        if (note != null) { from.value = "${note.id}|daily"; onOpen(note.id) }
+                        // Browsing days creates nothing; the note is made on the first tap.
+                        else scope.launch { onOpen(app.dailyNote(day)) }
+                    },
+                    onLongClick = if (note != null) ({ haptic.performHapticFeedback(HapticFeedbackType.LongPress); pressed = true }) else null,
+                ).padding(16.dp, 12.dp),
+            ) {
+                Text(note?.title?.ifBlank { null } ?: longDate(day), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    note.text.replace('\n', ' ').take(170).ifBlank { "No content yet" },
+                    note?.text.orEmpty().replace('\n', ' ').take(170).ifBlank { "No content yet" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (note != null) NoteMenu(
+                    app, note, all, pressed, { pressed = false }, { it() }, {}, onRemindNote, centered = true,
+                    onExport = { f -> exportNotes(listOf(note.id), f) },
+                    onShare = { f -> shareNotes(app, context, listOf(note.id), f) },
+                )
             }
             HorizontalDivider()
+        }
+        if (dayReminders.isNotEmpty()) item {
+            Text(
+                "Reminders", Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp),
+                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        items(dayReminders, key = { "rem:${it.key}" }) { r ->
+            var pressed by remember { mutableStateOf(false) }
+            ReminderCard(
+                app, r, colors[r.noteId], selecting = false, picked = false,
+                modifier = Modifier.padding(12.dp, 4.dp).fillMaxWidth().animateItem().noteBounds("rem:${r.key}|daily", 16.dp),
+                onClick = {
+                    if (r.kind != "reminder" && r.taskId == null) onOpen(r.noteId)
+                    else {
+                        from.value = "rem:${r.key}|daily"
+                        if (r.taskId != null) onEditTask(r.noteId, r.taskId) else onEdit(r.noteId)
+                    }
+                },
+                onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); pressed = true },
+                onToggle = {},
+                onOpen = onOpen,
+            )
+            if (pressed) ReminderMenu(app, r) { pressed = false }
         }
     }
 }
 
-/** Port of Calendar in ListColumn.tsx: today in the accent color and boxed, a dot on days with a note. */
+/** Port of Calendar in ListColumn.tsx: the picked day boxed, today in the accent color, a dot on days with a note or reminder. */
 @Composable
-private fun Calendar(today: String, withNotes: Set<String>, onPick: (String) -> Unit) {
+private fun Calendar(today: String, selected: String, withNotes: Set<String>, onPick: (String) -> Unit) {
     var month by rememberSaveable { mutableStateOf(today.take(7)) }
     val ym = YearMonth.parse(month)
     val weekStart = remember { firstDayOfWeek() }
@@ -108,21 +166,23 @@ private fun Calendar(today: String, withNotes: Set<String>, onPick: (String) -> 
                 week.forEach { key ->
                     val outside = key.take(7) != month
                     val isToday = key == today
+                    val isPicked = key == selected
                     val has = key in withNotes
                     Box(
                         Modifier.weight(1f).aspectRatio(1f).heightIn(max = 44.dp).padding(1.dp).clip(RoundedCornerShape(7.dp))
-                            .then(if (isToday) Modifier.background(colors.onSurface) else Modifier)
+                            .then(if (isPicked) Modifier.background(colors.onSurface) else Modifier)
                             .clickable { onPick(key) }
-                            .alpha(if (outside && !isToday) 0.6f else 1f),
+                            .alpha(if (outside && !isPicked) 0.6f else 1f),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             LocalDate.parse(key).dayOfMonth.toString(),
                             fontFamily = FontFamily.Monospace,
                             fontSize = 13.sp,
-                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = if (isToday || isPicked) FontWeight.Bold else FontWeight.Normal,
                             color = when {
-                                isToday -> colors.surface
+                                isPicked -> colors.surface
+                                isToday -> colors.primary
                                 outside -> colors.onSurfaceVariant
                                 else -> colors.onSurface
                             },
@@ -130,7 +190,7 @@ private fun Calendar(today: String, withNotes: Set<String>, onPick: (String) -> 
                         if (has) {
                             Box(
                                 Modifier.align(Alignment.BottomCenter).offset(y = (-5).dp).size(4.dp).clip(CircleShape)
-                                    .background(if (isToday) colors.surface else colors.primary),
+                                    .background(if (isPicked) colors.surface else colors.primary),
                             )
                         }
                     }

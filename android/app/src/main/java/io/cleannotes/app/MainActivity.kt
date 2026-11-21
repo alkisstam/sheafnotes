@@ -135,6 +135,8 @@ fun NotesApp(app: App, shared: MutableState<Intent?>) {
     }
     val listState = rememberLazyListState()
     val gridState = rememberLazyGridState()
+    // Here so the picked day survives opening a note from Daily notes.
+    val dailyDay = rememberSaveable { mutableStateOf(dateKey()) }
     val paired by app.sync.paired.collectAsState()
     val openFrom = rememberSaveable { mutableStateOf("") }
     val runSync = {
@@ -226,7 +228,7 @@ fun NotesApp(app: App, shared: MutableState<Intent?>) {
                     }
                 } else {
                     NoteList(
-                        app, syncing, snackbar, view, notes, listState, gridState,
+                        app, syncing, snackbar, view, notes, listState, gridState, dailyDay,
                         onView = { view = it },
                         onSync = { runSync() },
                         onOpen = { openId = it },

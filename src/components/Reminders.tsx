@@ -54,11 +54,14 @@ function NoteCard({ note, compact, onRemove }: { note: Note; compact?: boolean; 
 
 type RowSelect = { selecting: boolean; ticked: boolean; onSelect: () => void; onToggle: () => void };
 
-function ReminderRow({ r, active, sel }: { r: ReminderItem; active: boolean; sel: RowSelect }) {
+const NO_SELECT: RowSelect = { selecting: false, ticked: false, onSelect: () => {}, onToggle: () => {} };
+
+export function ReminderRow({ r, active, sel: given }: { r: ReminderItem; active: boolean; sel?: RowSelect }) {
+  const sel = given ?? NO_SELECT;
   const [ctx, setCtx] = useState<DOMRect | null>(null);
   const late = !r.done && r.at < new Date();
   const items: MenuItem[] = [
-    { label: 'Select', icon: <SquareCheck size={14} />, run: sel.onSelect },
+    ...(given ? [{ label: 'Select', icon: <SquareCheck size={14} />, run: sel.onSelect }] : []),
     { label: r.done ? 'Restore' : 'Complete', icon: <CircleCheck size={14} />, run: () => void setReminderDone(r, !r.done) },
     // To-dos have no favorite flag of their own.
     ...(r.taskId ? [] : [{ label: r.favorite ? 'Unfavorite' : 'Favorite', icon: <Star size={14} />, run: () => void patchNote(r.noteId, { favorite: !r.favorite }) }]),

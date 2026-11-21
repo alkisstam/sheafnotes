@@ -106,6 +106,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -132,6 +133,7 @@ fun NoteList(
     all: List<NoteRow>,
     listState: LazyListState,
     gridState: LazyGridState,
+    dailyDay: MutableState<String>,
     onView: (String) -> Unit,
     onSync: () -> Unit,
     onOpen: (String) -> Unit,
@@ -398,7 +400,7 @@ fun NoteList(
                 PullToRefreshBox(syncing, onSync, Modifier.padding(pad).fillMaxSize()) {
                     // Searching covers every view, as on the web.
                     if (query.isNotBlank()) SearchBody(app, all, query, onOpen, onOpenPdf)
-                    else if (view == "daily") DailyBody(app, all, onOpen)
+                    else if (view == "daily") DailyBody(app, all, colors, dailyDay, onOpen, onEditReminder, onEditTask, onRemindNote)
                     else if (view == "tasks") TasksBody(app, tasks, onOpen)
                     else if (view == "reminders") RemindersBody(app, reminderGroups, colors, onOpen, onEditReminder, onEditTask) { remindersSelecting = it }
                     else if (view == "pdfs") PdfsBody(app, all, onOpenPdf)

@@ -13,6 +13,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -66,8 +70,6 @@ fun RemindersBody(
         "completed" -> groups.completed
         else -> groups.today
     }
-    val now = LocalDateTime.now()
-    val dark = LocalDark.current
     val haptic = LocalHapticFeedback.current
     val from = LocalOpenFrom.current
     // Keys of the picked reminders; null outside select mode.
@@ -118,54 +120,24 @@ fun RemindersBody(
             )
         }
         items(list, key = { it.key }) { r ->
-            val late = !r.done && r.at.isBefore(now)
-            val picked = r.key in selected.orEmpty()
-            val shape = RoundedCornerShape(16.dp)
-            Surface(
-                modifier = Modifier.fillMaxWidth().animateItem().noteBounds("rem:${r.key}|reminders", 16.dp).clip(shape).combinedClickable(
-                    onClick = {
-                        if (selected != null) toggle(r.key)
-                        else if (r.kind != "reminder" && r.taskId == null) onOpen(r.noteId)
-                        else {
-                            from.value = "rem:${r.key}|reminders"
-                            if (r.taskId != null) onEditTask(r.noteId, r.taskId) else onEdit(r.noteId)
-                        }
-                    },
-                    onLongClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        if (selected == null) selected = listOf(r.key) else toggle(r.key)
-                    },
-                ),
-                shape = shape,
-                color = noteColor(colors[r.noteId], dark) ?: MaterialTheme.colorScheme.surfaceContainer,
-                border = if (picked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-            ) {
-                Row(Modifier.padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // In select mode the circle picks the card instead of ticking it.
-                    if (selected != null) RoundTick(picked, if (picked) "Deselect ${r.title}" else "Select ${r.title}") { toggle(r.key) }
-                    else RoundTick(r.done, if (r.done) "Mark ${r.title} not done" else "Mark ${r.title} done") { app.scope.launch { tick(app, r) } }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            r.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleMedium,
-                            textDecoration = if (r.done) TextDecoration.LineThrough else null,
-                            color = if (r.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                        )
-                        Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "${dueLabel(r.at.toLocalDate().toString())} ${r.at.toLocalTime().format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (late) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (r.repeat != null) Icon(painterResource(R.drawable.ic_repeat), "Repeats ${r.repeat}", Modifier.padding(start = 6.dp).size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        r.ref?.let { n -> NoteCard(n, Modifier.padding(top = 8.dp), compact = true) { if (selected != null) toggle(r.key) else onOpen(n.id) } }
+            ReminderCard(
+                app, r, colors[r.noteId], selected != null, r.key in selected.orEmpty(),
+                Modifier.fillMaxWidth().animateItem().noteBounds("rem:${r.key}|reminders", 16.dp),
+                onClick = {
+                    if (selected != null) toggle(r.key)
+                    else if (r.kind != "reminder" && r.taskId == null) onOpen(r.noteId)
+                    else {
+                        from.value = "rem:${r.key}|reminders"
+                        if (r.taskId != null) onEditTask(r.noteId, r.taskId) else onEdit(r.noteId)
                     }
-                    if (r.favorite) Box(Modifier.padding(start = 8.dp)) {
-                        Icon(painterResource(R.drawable.ic_star_filled), "Favorite", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
+                },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    if (selected == null) selected = listOf(r.key) else toggle(r.key)
+                },
+                onToggle = { toggle(r.key) },
+                onOpen = onOpen,
+            )
         }
     }
     var askDelete by remember { mutableStateOf(false) }
@@ -191,12 +163,7 @@ fun RemindersBody(
             }
             Row(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 10.dp)) {
                 PillAction(if (allDone) "Restore" else "Complete", R.drawable.ic_circle_check, picked.isNotEmpty()) {
-                    app.scope.launch {
-                        picked.forEach { r ->
-                            if (r.taskId != null) app.setTaskAttrs(r.noteId, r.taskId, mapOf("checked" to !allDone))
-                            else setDone(app, r.noteId, r.kind == "reminder", !allDone)
-                        }
-                    }
+                    app.scope.launch { picked.forEach { complete(app, it, !allDone) } }
                     done()
                 }
                 PillAction(if (allFav) "Unfavorite" else "Favorite", if (allFav) R.drawable.ic_star_filled else R.drawable.ic_star, favable.isNotEmpty()) {
@@ -222,6 +189,77 @@ fun RemindersBody(
     }
     }
 }
+
+/** One reminder as a card: tick, title, time and its attached note. In select mode the circle picks the card instead. */
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+fun ReminderCard(
+    app: App, r: ReminderItem, color: String?, selecting: Boolean, picked: Boolean, modifier: Modifier,
+    onClick: () -> Unit, onLongClick: () -> Unit, onToggle: () -> Unit, onOpen: (String) -> Unit,
+) {
+    val late = !r.done && r.at.isBefore(LocalDateTime.now())
+    val shape = RoundedCornerShape(16.dp)
+    Surface(
+        modifier = modifier.clip(shape).combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = shape,
+        color = noteColor(color, LocalDark.current) ?: MaterialTheme.colorScheme.surfaceContainer,
+        border = if (picked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+    ) {
+        Row(Modifier.padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (selecting) RoundTick(picked, if (picked) "Deselect ${r.title}" else "Select ${r.title}", onToggle)
+            else RoundTick(r.done, if (r.done) "Mark ${r.title} not done" else "Mark ${r.title} done") { app.scope.launch { tick(app, r) } }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    r.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleMedium,
+                    textDecoration = if (r.done) TextDecoration.LineThrough else null,
+                    color = if (r.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                )
+                Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${dueLabel(r.at.toLocalDate().toString())} ${r.at.toLocalTime().format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (late) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (r.repeat != null) Icon(painterResource(R.drawable.ic_repeat), "Repeats ${r.repeat}", Modifier.padding(start = 6.dp).size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                r.ref?.let { n -> NoteCard(n, Modifier.padding(top = 8.dp), compact = true) { if (selecting) onToggle() else onOpen(n.id) } }
+            }
+            if (r.favorite) Box(Modifier.padding(start = 8.dp)) {
+                Icon(painterResource(R.drawable.ic_star_filled), "Favorite", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+/** A reminder's long-press menu, the same actions as its right-click menu on the web. */
+@Composable
+fun ReminderMenu(app: App, r: ReminderItem, onDismiss: () -> Unit) {
+    var askDelete by remember { mutableStateOf(false) }
+    if (askDelete) AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete reminder?") },
+        confirmButton = {
+            TextButton(onClick = { onDismiss(); app.scope.launch { deleteReminder(app, r) } }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    ) else Dialog(onDismiss) {
+        Surface(shape = MenuShape, color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.width(IntrinsicSize.Max).widthIn(min = 240.dp).padding(vertical = 8.dp)) {
+                MenuItem(if (r.done) "Restore" else "Complete", { onDismiss(); app.scope.launch { complete(app, r, !r.done) } }, R.drawable.ic_circle_check)
+                // To-dos have no favorite flag of their own.
+                if (r.taskId == null) MenuItem(if (r.favorite) "Unfavorite" else "Favorite", {
+                    onDismiss(); app.scope.launch { app.updateNote(r.noteId) { n, _ -> n.put("favorite", !r.favorite) } }
+                }, if (r.favorite) R.drawable.ic_star_filled else R.drawable.ic_star)
+                MenuItem("Delete", { askDelete = true }, R.drawable.ic_trash)
+            }
+        }
+    }
+}
+
+private suspend fun complete(app: App, r: ReminderItem, done: Boolean) =
+    if (r.taskId != null) app.setTaskAttrs(r.noteId, r.taskId, mapOf("checked" to done))
+    else setDone(app, r.noteId, r.kind == "reminder", done)
 
 /** A circle, ticked when [on]. */
 @Composable

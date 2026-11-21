@@ -20,8 +20,8 @@ import { Menu, MenuPopup, type MenuItem } from './Overlay';
 import { dropProps, NOTE_DRAG } from './Sidebar';
 import { noteMenuItems } from './EditorPane';
 import { currentEditor } from '../editor/NoteEditor';
-import { RemindersBody } from './Reminders';
-import { linkedReminder } from '../lib/reminders';
+import { ReminderRow, RemindersBody } from './Reminders';
+import { linkedReminder, reminderItems } from '../lib/reminders';
 
 const Hit = ({ s }: { s: Snippet }) => (
   <>
@@ -344,6 +344,7 @@ export function ListColumn({ notes, notebooks, searchRef }: { notes: Note[]; not
   const setSort = useStore((s) => s.setSort);
   const dailyDate = useStore((s) => s.dailyDate);
   const activePdf = useStore((s) => s.pdf?.fileId);
+  const editingReminder = useStore((s) => s.reminder);
   const collapsedNotes = useStore((s) => s.collapsedNotes);
   const setPane = useStore((s) => s.setPane);
   const selected = useStore((s) => s.selected);
@@ -367,8 +368,7 @@ export function ListColumn({ notes, notebooks, searchRef }: { notes: Note[]; not
     else if (view.type === 'archive') out = live.filter((n) => n.archivedAt);
     else if (view.type === 'trash') out = notes.filter((n) => n.trashedAt);
     else if (view.type === 'daily') {
-      out = live.filter((n) => n.kind === 'daily' && (n.text || n.date === dailyDate));
-      return out.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+      return live.filter((n) => n.kind === 'daily' && n.date === dailyDate);
     }
     const cmp: Record<SortKey, (a: Note, b: Note) => number> = {
       updated: (a, b) => b.updatedAt - a.updatedAt,
@@ -419,9 +419,17 @@ export function ListColumn({ notes, notebooks, searchRef }: { notes: Note[]; not
   }, [query, live, files, ownerOf]);
 
   const searching = Boolean(query.trim());
+  const reminders = useMemo(() => (view.type === 'daily' ? reminderItems(notes) : []), [view.type, notes]);
+  const dayReminders = useMemo(
+    () => reminders.filter((r) => dateKey(r.at) === dailyDate).sort((a, b) => +a.at - +b.at),
+    [reminders, dailyDate],
+  );
   const dates = useMemo(
-    () => new Set(live.filter((n) => n.kind === 'daily' && n.text && n.date).map((n) => n.date!)),
-    [live],
+    () => new Set([
+      ...live.filter((n) => n.kind === 'daily' && n.text && n.date).map((n) => n.date!),
+      ...reminders.filter((r) => !r.done).map((r) => dateKey(r.at)),
+    ]),
+    [live, reminders],
   );
 
   const title = searching ? 'Search' : viewTitle(view, notebooks, dailyDate);
@@ -555,6 +563,18 @@ export function ListColumn({ notes, notebooks, searchRef }: { notes: Note[]; not
                 }
               />
             ))}
+            {dayReminders.length > 0 && (
+              <>
+                <p className="list-count day-reminders">Reminders</p>
+                {dayReminders.map((r) => (
+                  <ReminderRow
+                    key={r.key}
+                    r={r}
+                    active={r.key === (editingReminder?.task ? editingReminder.task.noteId + editingReminder.task.taskId : editingReminder?.id)}
+                  />
+                ))}
+              </>
+            )}
           </div>
         ) : trashEmpty ? (
           <Empty title="Trash is empty" />

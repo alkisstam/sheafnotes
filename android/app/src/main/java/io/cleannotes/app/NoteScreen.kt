@@ -209,21 +209,22 @@ fun NoteMenu(
     val act = { block: suspend () -> Unit -> onDismiss(); before { app.scope.launch { block() } } }
     val items: @Composable () -> Unit = {
         if (onSelect != null) MenuItem("Select", { onDismiss(); onSelect() }, R.drawable.ic_square_check)
-        // Same toggles as the web's note menu.
-        MenuItem(if (note.pinned) "Unpin" else "Pin to top", {
+        // Same toggles as the web's note menu; daily notes cannot be pinned, archived or moved there either.
+        val daily = note.kind == "daily"
+        if (!daily) MenuItem(if (note.pinned) "Unpin" else "Pin to top", {
             act { app.updateNote(id) { j, _ -> j.put("pinned", !note.pinned) } }
         }, if (note.pinned) R.drawable.ic_pin_off else R.drawable.ic_pin)
-        MenuItem(if (note.archivedAt != null) "Unarchive" else "Archive", {
+        if (!daily) MenuItem(if (note.archivedAt != null) "Unarchive" else "Archive", {
             act { app.updateNote(id) { j, now -> j.put("archivedAt", if (note.archivedAt != null) JSONObject.NULL else now) } }
         }, if (note.archivedAt != null) R.drawable.ic_archive_restore else R.drawable.ic_archive)
         if (onLinkNote != null) MenuItem("Link to note", { onDismiss(); onLinkNote() }, R.drawable.ic_file_symlink)
-        MenuItem("Move into note…", { onDismiss(); nesting = true }, R.drawable.ic_file_input)
+        if (!daily) MenuItem("Move into note…", { onDismiss(); nesting = true }, R.drawable.ic_file_input)
         if (note.parentId != null) {
             MenuItem("Move to top level", {
                 act { app.updateNote(id) { j, _ -> j.put("parentId", JSONObject.NULL) } }
             }, R.drawable.ic_corner_left_up)
         }
-        MenuItem("Move to notebook", { onDismiss(); moving = true }, R.drawable.ic_folder_input)
+        if (!daily) MenuItem("Move to notebook", { onDismiss(); moving = true }, R.drawable.ic_folder_input)
         MenuItem("Background color", { onDismiss(); coloring = true }, R.drawable.ic_palette)
         MenuItem(if (linkedReminder(live, id) != null) "Edit reminder" else "Add reminder", { onDismiss(); before { onRemind(id) } }, R.drawable.ic_bell)
         if (onShare != null) MenuItem("Share", { onDismiss(); sharing = true }, R.drawable.ic_share_2)
