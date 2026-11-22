@@ -69,6 +69,8 @@ dependencies {
     implementation(libs.code.scanner)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.work)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
     testImplementation(libs.junit)
     // Android's own org.json is a stub in JVM tests.
     testImplementation(libs.org.json)

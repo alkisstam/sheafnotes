@@ -45,6 +45,65 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+        <receiver android:name=".TasksWidgetReceiver" android:exported="true" android:label="@string/widget_tasks">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_tasks" />
+        </receiver>
+        <receiver android:name=".RemindersWidgetReceiver" android:exported="true" android:label="@string/widget_reminders">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_reminders" />
+        </receiver>
+        <receiver android:name=".NotesWidgetReceiver" android:exported="true" android:label="@string/widget_notes">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_notes" />
+        </receiver>
+        <receiver android:name=".TasksWidgetReceiver2x2" android:exported="true" android:label="@string/widget_tasks">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_tasks_2x2" />
+        </receiver>
+        <receiver android:name=".TasksWidgetReceiver4x2" android:exported="true" android:label="@string/widget_tasks">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_tasks_4x2" />
+        </receiver>
+        <receiver android:name=".RemindersWidgetReceiver2x2" android:exported="true" android:label="@string/widget_reminders">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_reminders_2x2" />
+        </receiver>
+        <receiver android:name=".RemindersWidgetReceiver4x2" android:exported="true" android:label="@string/widget_reminders">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_reminders_4x2" />
+        </receiver>
+        <receiver android:name=".NotesWidgetReceiver2x2" android:exported="true" android:label="@string/widget_notes">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_notes_2x2" />
+        </receiver>
+        <receiver android:name=".NotesWidgetReceiver4x2" android:exported="true" android:label="@string/widget_notes">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_notes_4x2" />
+        </receiver>
+        <activity android:name=".WidgetPickActivity" android:exported="true" android:theme="@style/Theme.CleanNotes">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
         <!-- Lets other apps read the one file handed to them through "Open with". -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -63,7 +63,7 @@ class App : Application() {
         // Also schedules it for installs paired before background sync existed.
         if (sync.paired.value) SyncWorker.schedule(this)
         // Every change to the notes (edits, sync, ticks, trash) re-picks the next reminder.
-        scope.launch { db.dao().liveNotes().debounce(1000).collect { Reminders.schedule(this@App, it) } }
+        scope.launch { db.dao().liveNotes().debounce(1000).collect { Reminders.schedule(this@App, it); updateWidgets(this@App) } }
         scope.launch { seedIfEmpty() }
         scope.launch { migrateReminders() }
     }

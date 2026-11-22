@@ -47,16 +47,27 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TimePicker
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
+import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -153,7 +164,8 @@ private fun ReminderForm(
     var focusTodo by remember { mutableStateOf<String?>(null) }
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     val date = rememberDatePickerState(initialSelectedDateMillis = keyToMillis(start.toLocalDate().toString()))
-    val time = rememberTimePickerState(start.hour, start.minute, DateFormat.is24HourFormat(ctx))
+    var hour by rememberSaveable { mutableIntStateOf(start.hour) }
+    var minute by rememberSaveable { mutableIntStateOf(start.minute) }
     val day = date.selectedDateMillis?.let(::millisToKey) ?: dateKey()
     val allowReminders = rememberReminderPermission()
     LaunchedEffect(Unit) { if (id == null && todo?.remind == null) allowReminders() }
@@ -166,12 +178,12 @@ private fun ReminderForm(
     }
 
     val save = save@{
-        val at = "${day}T%02d:%02d".format(time.hour, time.minute)
+        val at = "${day}T%02d:%02d".format(hour, minute)
         if (task != null && todo != null) {
             val name = title.trim()
             app.scope.launch {
                 app.updateNote(task.first, contentChanged = true) { n, _ ->
-                    var c = patchTask(n.getJSONObject("content"), task.second, mapOf("due" to day, "remind" to "%02d:%02d".format(time.hour, time.minute)))
+                    var c = patchTask(n.getJSONObject("content"), task.second, mapOf("due" to day, "remind" to "%02d:%02d".format(hour, minute)))
                     if (name != todo.text) c = renameTask(c, task.second, name)
                     n.put("content", c).put("text", docText(c))
                 }
@@ -298,11 +310,11 @@ private fun ReminderForm(
                         DatePicker(date, title = null, headline = null, showModeToggle = false, colors = DatePickerDefaults.colors(containerColor = Color.Transparent))
                     }
                     HorizontalDivider(Modifier.padding(horizontal = 12.dp))
-                    Option(R.drawable.ic_clock, LocalTime.of(time.hour, time.minute).format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)), open == "time", enabled = !ro) {
+                    Option(R.drawable.ic_clock, LocalTime.of(hour, minute).format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)), open == "time", enabled = !ro) {
                         open = if (open == "time") null else "time"
                     }
                     AnimatedVisibility(open == "time") {
-                        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) { TimePicker(time) }
+                        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) { WheelTimePicker(hour, minute, DateFormat.is24HourFormat(ctx)) { h, m -> hour = h; minute = m } }
                     }
                     if (task == null) HorizontalDivider(Modifier.padding(horizontal = 12.dp))
                     if (task == null) Option(R.drawable.ic_repeat, REPEATS.first { it.first == repeat }.second, open == "repeat", dim = repeat == null, enabled = !ro) {
@@ -392,4 +404,53 @@ fun connectedShapes(i: Int, n: Int): IconButtonShapes = when {
     i == 0 -> IconButtonDefaults.shapes(ButtonGroupDefaults.connectedLeadingButtonShape, ButtonGroupDefaults.connectedLeadingButtonPressShape)
     i == n - 1 -> IconButtonDefaults.shapes(ButtonGroupDefaults.connectedTrailingButtonShape, ButtonGroupDefaults.connectedTrailingButtonPressShape)
     else -> IconButtonDefaults.shapes(ShapeDefaults.Small, ButtonGroupDefaults.connectedMiddleButtonPressShape)
+}
+
+/** Hours and minutes (and AM/PM in 12-hour locales) as scrolling wheels, like the Clock app's. */
+@Composable
+private fun WheelTimePicker(hour: Int, minute: Int, is24h: Boolean, onChange: (hour: Int, minute: Int) -> Unit) {
+    val change by rememberUpdatedState(onChange)
+    val big = MaterialTheme.typography.displayMedium
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (is24h) Wheel(24, hour, true, big, { "%02d".format(it) }) { change(it, minute) }
+        else Wheel(12, hour % 12, true, big, { "${if (it == 0) 12 else it}" }) { change(it + if (hour >= 12) 12 else 0, minute) }
+        Text(":", Modifier.padding(horizontal = 8.dp), style = big)
+        Wheel(60, minute, true, big, { "%02d".format(it) }) { change(hour, it) }
+        if (!is24h) {
+            val amPm = java.text.DateFormatSymbols.getInstance().amPmStrings
+            Wheel(2, if (hour >= 12) 1 else 0, false, MaterialTheme.typography.titleLarge, { amPm[it] }) { change(hour % 12 + it * 12, minute) }
+        }
+    }
+}
+
+/** One wheel of [count] values, three rows tall; the middle row is the picked one. A looping wheel runs on in both directions. */
+@Composable
+private fun Wheel(count: Int, value: Int, loop: Boolean, style: TextStyle, label: (Int) -> String, onPick: (Int) -> Unit) {
+    val row = 56.dp
+    val half = with(LocalDensity.current) { row.toPx() / 2 }
+    val pick by rememberUpdatedState(onPick)
+    // A looping wheel is a long run of repeats started in the middle; a fixed one has a blank row at each end.
+    val total = if (loop) count * 1000 else count + 2
+    val valueAt = { i: Int -> if (loop) i % count else i - 1 }
+    val state = rememberLazyListState(if (loop) count * 500 + value - 1 else value)
+    val centre by remember { derivedStateOf { state.firstVisibleItemIndex + if (state.firstVisibleItemScrollOffset > half) 2 else 1 } }
+    val haptic = LocalHapticFeedback.current
+    LaunchedEffect(state) {
+        snapshotFlow { centre }.drop(1).collect {
+            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            valueAt(it).takeIf { v -> v in 0 until count }?.let(pick)
+        }
+    }
+    LazyColumn(Modifier.height(row * 3).width(if (loop) 88.dp else 64.dp), state, flingBehavior = rememberSnapFlingBehavior(state)) {
+        items(total) { i ->
+            val v = valueAt(i)
+            Box(Modifier.height(row).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                if (v in 0 until count) Text(
+                    label(v),
+                    Modifier.graphicsLayer { val on = i == centre; alpha = if (on) 1f else 0.35f; scaleX = if (on) 1f else 0.8f; scaleY = scaleX },
+                    style = style,
+                )
+            }
+        }
+    }
 }

@@ -51,7 +51,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.WeekFields
+import java.util.Locale
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
@@ -119,7 +122,12 @@ fun RemindersBody(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        items(list, key = { it.key }) { r ->
+        val sections = if (tab == "scheduled") scheduledSections(list, LocalDate.now(), WeekFields.of(Locale.getDefault()).firstDayOfWeek) else listOf("" to list)
+        sections.forEach { (label, rows) ->
+        if (label.isNotEmpty()) item(key = "h:$label") {
+            Text(label, Modifier.animateItem().padding(start = 4.dp, top = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        items(rows, key = { it.key }) { r ->
             ReminderCard(
                 app, r, colors[r.noteId], selected != null, r.key in selected.orEmpty(),
                 Modifier.fillMaxWidth().animateItem().noteBounds("rem:${r.key}|reminders", 16.dp),
@@ -138,6 +146,7 @@ fun RemindersBody(
                 onToggle = { toggle(r.key) },
                 onOpen = onOpen,
             )
+        }
         }
     }
     var askDelete by remember { mutableStateOf(false) }

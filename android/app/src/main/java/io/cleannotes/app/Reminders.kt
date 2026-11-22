@@ -125,7 +125,15 @@ fun groupReminders(items: List<ReminderItem>, today: LocalDate): ReminderGroups 
     )
 }
 
-/** One notification to show: a to-do's or a whole note's. `key` keeps their notifications apart. */
+/** Scheduled reminders under Tomorrow, This week, Next week, This month and Later; each goes in the first that fits, empty ones are left out. */
+fun scheduledSections(scheduled: List<ReminderItem>, today: LocalDate, weekStart: java.time.DayOfWeek): List<Pair<String, List<ReminderItem>>> {
+    val weekEnd = today.with(java.time.temporal.TemporalAdjusters.next(weekStart)).minusDays(1)
+    val ends = listOf("Tomorrow" to today.plusDays(1), "This week" to weekEnd, "Next week" to weekEnd.plusDays(7), "This month" to today.withDayOfMonth(today.lengthOfMonth()))
+    return scheduled.groupBy { r -> ends.firstOrNull { !r.at.toLocalDate().isAfter(it.second) }?.first ?: "Later" }
+        .let { g -> (ends.map { it.first } + "Later").mapNotNull { k -> g[k]?.let { k to it } } }
+}
+
+/** One notification to show:a to-do's or a whole note's. `key` keeps their notifications apart. */
 data class Due(val key: String, val noteId: String, val title: String, val text: String, val at: Long, val taskId: String? = null)
 
 /** Every reminder in a note's JSON: its to-dos' and its own. */

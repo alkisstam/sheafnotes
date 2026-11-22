@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
 
 // From src/styles/tokens.css. Translucent tokens are pre-blended over --list, the note page's background.
-private val Day = lightColorScheme(
+val Day = lightColorScheme(
     primary = Color(0xFFB5391B), // --accent
     onPrimary = Color(0xFFFFF9F5),
     primaryContainer = Color(0xFFEEDFD5), // --accent-soft
@@ -56,7 +56,7 @@ private val Day = lightColorScheme(
     outlineVariant = Color(0xFFDDDAD3), // --line
 )
 
-private val Night = darkColorScheme(
+val Night = darkColorScheme(
     primary = Color(0xFFF0805F),
     onPrimary = Color(0xFF1E0F09),
     primaryContainer = Color(0xFF382720),

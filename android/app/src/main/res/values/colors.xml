@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker previews; the same colors as Day/Night in Theme.kt. -->
+<resources>
+    <color name="widget_bg">#F4F1EA</color>
+    <color name="widget_card">#FBF9F5</color>
+    <color name="widget_button">#EEDFD5</color>
+    <color name="widget_ink">#211E1A</color>
+    <color name="widget_ink_2">#57514A</color>
+    <color name="widget_accent">#B5391B</color>
+</resources>

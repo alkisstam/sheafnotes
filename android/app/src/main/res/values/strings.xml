@@ -1,4 +1,10 @@
 <resources>
     <string name="app_name">Sheaf Notes</string>
     <string name="share_label">New note - Sheaf Notes</string>
+    <string name="widget_tasks">Tasks</string>
+    <string name="widget_tasks_description">Your open tasks, tick them off from the home screen</string>
+    <string name="widget_reminders">Reminders</string>
+    <string name="widget_reminders_description">Upcoming reminders, with a button to add one</string>
+    <string name="widget_notes">Notes</string>
+    <string name="widget_notes_description">Notes you pick, with a button for a new note</string>
 </resources>

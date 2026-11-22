@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.text.format.DateUtils
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.SnackbarHostState
@@ -75,7 +76,7 @@ class MainActivity : ComponentActivity() {
     private val shared = mutableStateOf<Intent?>(null)
 
     private fun receive(intent: Intent?) {
-        if (intent?.action in listOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE, Reminders.OPEN_NOTE)) shared.value = intent
+        if (intent?.action in listOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE, Reminders.OPEN_NOTE, WidgetActions.NEW_NOTE, WidgetActions.NEW_REMINDER, WidgetActions.EDIT_REMINDER)) shared.value = intent
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -117,6 +118,9 @@ fun NotesApp(app: App, shared: MutableState<Intent?>) {
     // A new reminder's attached note, or the to-do ("noteId/taskId") whose reminder is edited.
     var reminderAttach by rememberSaveable { mutableStateOf<String?>(null) }
     var reminderTask by rememberSaveable { mutableStateOf<String?>(null) }
+    // Opened from a home-screen widget: closing what it opened leaves the app instead of showing the list.
+    var fromWidget by rememberSaveable { mutableStateOf(false) }
+    val activity = LocalActivity.current
     // One key per view, matching View in src/lib/types.ts: "all", "trash", "nb:<id>", ...
     var view by rememberSaveable { mutableStateOf("all") }
     // A PDF to open with the note, when the note was opened from the PDFs list.
@@ -163,13 +167,27 @@ fun NotesApp(app: App, shared: MutableState<Intent?>) {
 
     LaunchedEffect(shared.value) {
         val intent = shared.value ?: return@LaunchedEffect
-        if (intent.action == Reminders.OPEN_NOTE) {
+        if (intent.action in listOf(Reminders.OPEN_NOTE, WidgetActions.NEW_NOTE, WidgetActions.NEW_REMINDER, WidgetActions.EDIT_REMINDER)) {
             connecting = false
             reminderId = null
             view = "all"
             trail = emptyList()
             openPdf = null
-            openId = intent.getStringExtra("noteId")
+            openFrom.value = ""
+            fromWidget = intent.getBooleanExtra("widget", false)
+            val noteId = intent.getStringExtra("noteId")
+            val taskId = intent.getStringExtra("taskId")
+            when (intent.action) {
+                WidgetActions.NEW_NOTE -> openId = app.newNote()
+                WidgetActions.NEW_REMINDER -> { openId = null; reminderAttach = null; reminderTask = null; reminderId = "new" }
+                WidgetActions.EDIT_REMINDER -> {
+                    openId = null
+                    reminderAttach = null
+                    reminderTask = taskId?.let { "$noteId/$it" }
+                    reminderId = if (taskId != null) "task" else noteId
+                }
+                else -> openId = noteId
+            }
             shared.value = null
             return@LaunchedEffect
         }
@@ -178,6 +196,7 @@ fun NotesApp(app: App, shared: MutableState<Intent?>) {
         } else listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
         val note = app.newNote(title = intent.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty(), body = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty())
         connecting = false
+        fromWidget = false
         view = "all"
         trail = emptyList()
         openPdf = null
@@ -203,12 +222,12 @@ fun NotesApp(app: App, shared: MutableState<Intent?>) {
             val id = target?.takeIf { it.startsWith("note:") }?.removePrefix("note:")
             CompositionLocalProvider(LocalShared provides this@SharedTransitionLayout, LocalNoteAnim provides this, LocalOpenFrom provides openFrom) {
                 if (target?.startsWith("reminder:") == true) {
-                    BackHandler { reminderId = null }
+                    BackHandler { if (fromWidget) activity?.finish() else reminderId = null }
                     key(target) {
                         ReminderScreen(
                             app, reminderId.takeIf { it != "new" && it != "task" }, reminderAttach,
                             reminderTask?.takeIf { reminderId == "task" }?.split('/')?.let { it[0] to it[1] },
-                            onClose = { reminderId = null },
+                            onClose = { if (fromWidget) activity?.finish() else reminderId = null },
                             onOpenNote = { reminderId = null; trail = emptyList(); openPdf = null; openId = it },
                         )
                     }
@@ -217,8 +236,8 @@ fun NotesApp(app: App, shared: MutableState<Intent?>) {
                     key(id) {
                         NoteScreen(
                             app, id, view.removePrefix("tag:").takeIf { view.startsWith("tag:") }, openPdf,
-                            onClose = { openId = trail.lastOrNull(); trail = trail.dropLast(1); openPdf = null },
-                            onOpenTag = { openId = null; trail = emptyList(); view = "tag:$it" },
+                            onClose = { if (fromWidget && trail.isEmpty()) activity?.finish() else { openId = trail.lastOrNull(); trail = trail.dropLast(1); openPdf = null } },
+                            onOpenTag = { fromWidget = false; openId = null; trail = emptyList(); view = "tag:$it" },
                             onOpenNote = { openId = it },
                             onFollowLink = { trail = trail + id; openId = it; openPdf = null },
                             // Opened from inside a note, so there is no card to grow out of.

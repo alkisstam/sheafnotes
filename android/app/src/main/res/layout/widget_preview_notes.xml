@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the launcher's widget picker shows before the widget is added. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
+    android:background="@drawable/widget_preview_bg" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="8dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="Notes" android:textColor="@color/widget_ink" android:textSize="18sp" android:fontFamily="sans-serif-medium" />
+        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:padding="10dp"
+            android:background="@drawable/widget_preview_button" android:src="@drawable/ic_square_pen" android:tint="@color/widget_ink" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="6dp" android:orientation="vertical"
+        android:background="@drawable/widget_preview_card" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="10dp" android:paddingBottom="10dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Shopping list" android:textColor="@color/widget_ink" android:textSize="14sp" android:fontFamily="sans-serif-medium" android:maxLines="1" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Milk, eggs, bread, coffee and something for dinner" android:textColor="@color/widget_ink_2" android:textSize="12sp" android:maxLines="3" android:ellipsize="end" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="6dp" android:orientation="vertical"
+        android:background="@drawable/widget_preview_card" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="10dp" android:paddingBottom="10dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ideas" android:textColor="@color/widget_ink" android:textSize="14sp" android:fontFamily="sans-serif-medium" android:maxLines="1" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="A garden by the window, and a shelf for the plants" android:textColor="@color/widget_ink_2" android:textSize="12sp" android:maxLines="3" android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>

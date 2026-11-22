@@ -672,7 +672,7 @@ fun NoteList(
 private val PILL_ROOM = 112.dp
 
 @Composable
-private fun BoxScope.Tick(on: Boolean) = Box(
+fun BoxScope.Tick(on: Boolean) = Box(
     Modifier.align(Alignment.TopEnd).padding(12.dp).size(22.dp).clip(CircleShape)
         .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
         .border(1.5.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape),
