@@ -89,6 +89,24 @@ export function groupReminders(items: ReminderItem[], now: Date): ReminderGroups
   };
 }
 
+/** Scheduled reminders under Tomorrow, This week, Next week, This month and Later; each goes in the first that fits, empty ones are left out. [weekStart] 0 is Sunday. */
+export function scheduledSections(scheduled: ReminderItem[], now: Date, weekStart: number): [string, ReminderItem[]][] {
+  const day = (n: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
+  const toWeekEnd = (weekStart - now.getDay() + 7) % 7 || 7;
+  const ends: [string, Date][] = [
+    ['Tomorrow', day(2)],
+    ['This week', day(toWeekEnd)],
+    ['Next week', day(toWeekEnd + 7)],
+    ['This month', new Date(now.getFullYear(), now.getMonth() + 1, 1)],
+  ];
+  const sections: [string, ReminderItem[]][] = [...ends.map(([k]): [string, ReminderItem[]] => [k, []]), ['Later', []]];
+  for (const r of scheduled) {
+    const i = ends.findIndex(([, end]) => r.at < end);
+    sections[i < 0 ? ends.length : i][1].push(r);
+  }
+  return sections.filter(([, list]) => list.length);
+}
+
 /** The open reminder attached to [noteId], so a second Add reminder edits it instead of making another. */
 export const linkedReminder = (notes: Note[], noteId: string) =>
   shelved(notes).find((n) => n.kind === 'reminder' && n.noteRef === noteId && !n.doneAt);

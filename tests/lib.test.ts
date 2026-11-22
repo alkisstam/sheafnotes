@@ -7,7 +7,7 @@ import type { Note } from '../src/lib/types';
 import { findRanges, includesFolded, snippet } from '../src/lib/search';
 import { buildTagTree, nestNotes, normalizeTag, noteHasTag, renameTagIn } from '../src/lib/tags';
 import { appendTask, extractTasks, groupTasks, patchTask, renameTask } from '../src/lib/tasks';
-import { advancedRemindAt, dueReminders, formatAt, groupReminders, linkedReminder, nextRepeat, parseAt, reminderItems } from '../src/lib/reminders';
+import { advancedRemindAt, dueReminders, formatAt, groupReminders, linkedReminder, scheduledSections, nextRepeat, parseAt, reminderItems } from '../src/lib/reminders';
 import { cellOverrides, clearKeys, sanitizeStyle, styleAttrs } from '../src/editor/TableStyle';
 
 describe('table style', () => {
@@ -276,6 +276,19 @@ describe('reminders', () => {
     expect(g.today.map((r) => r.noteId)).toEqual(['fav', 'late']);
     expect(g.scheduled.map((r) => r.noteId)).toEqual(['later']);
     expect(g.completed.map((r) => r.noteId)).toEqual(['done']);
+  });
+
+  it('splits scheduled reminders into Tomorrow, This week, Next week, This month and Later', () => {
+    const items = (...days: string[]) => reminderItems(days.map((d) => note(d, { remindAt: `${d}T09:00` })));
+    const keys = (s: ReturnType<typeof scheduledSections>) => s.map(([k, l]) => [k, l.map((r) => r.noteId)]);
+    // Monday, weeks from Monday: every bucket.
+    expect(keys(scheduledSections(items('2026-11-03', '2026-11-06', '2026-11-12', '2026-11-20', '2026-12-01'), at('2026-11-02T12:00'), 1))).toEqual([
+      ['Tomorrow', ['2026-11-03']], ['This week', ['2026-11-06']], ['Next week', ['2026-11-12']], ['This month', ['2026-11-20']], ['Later', ['2026-12-01']],
+    ]);
+    // Saturday, weeks from Sunday: tomorrow is already next week, and next week runs past the month's end.
+    expect(keys(scheduledSections(items('2026-11-29', '2026-12-03', '2026-12-10'), at('2026-11-28T12:00'), 0))).toEqual([
+      ['Tomorrow', ['2026-11-29']], ['Next week', ['2026-12-03']], ['Later', ['2026-12-10']],
+    ]);
   });
 
   it('shows the attached note unless it is in the Trash, and finds the open reminder for a note', () => {

@@ -1,9 +1,9 @@
 import { ArrowLeft, Bell, CalendarDays, CircleCheck, Clock, FileText, ListPlus, Pencil, Plus, Repeat, SquareCheck, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { deleteReminder, saveReminder, setReminderDone, patchNote, tickReminder, setTaskAttrs, trashNotes } from '../lib/actions';
-import { dueLabel } from '../lib/dates';
+import { dueLabel, firstDayOfWeek } from '../lib/dates';
 import { askToNotify } from '../lib/notify';
-import { formatAt, groupReminders, parseAt, reminderItems, taskAt, type ReminderItem } from '../lib/reminders';
+import { formatAt, groupReminders, parseAt, reminderItems, scheduledSections, taskAt, type ReminderItem } from '../lib/reminders';
 import { store, useStore, type ReminderEdit } from '../lib/store';
 import { extractTasks } from '../lib/tasks';
 import type { Note } from '../lib/types';
@@ -186,7 +186,10 @@ export function RemindersBody({ notes }: { notes: Note[] }) {
         ))}
       </div>
       {list.length ? (
-        list.map((r) => (
+        (tab === 'scheduled' ? scheduledSections(list, new Date(), firstDayOfWeek()) : [['', list] as const]).map(([name, rows]) => (
+          <section key={name} className="task-group">
+            {name && <h3>{name}<span>{rows.length}</span></h3>}
+            {rows.map((r) => (
           <ReminderRow
             key={r.key}
             r={r}
@@ -198,6 +201,8 @@ export function RemindersBody({ notes }: { notes: Note[] }) {
               onToggle: () => setSelected((s) => (s?.includes(r.key) ? s.filter((k) => k !== r.key) : [...(s ?? []), r.key])),
             }}
           />
+            ))}
+          </section>
         ))
       ) : (
         <div className="empty">
