@@ -1,5 +1,18 @@
 # Changelog — Android app
 
+## 1.6.0 — 2026-11-22
+
+### Added
+- Home-screen widgets for Tasks, Reminders and Notes, each in 2x2, 3x3 and 4x2, resizable and scrollable, with previews in the widget picker.
+- The Tasks widget ticks off tasks in place; tapping a task opens its note.
+- The Reminders widget has + for a new reminder; tapping one opens it.
+- The Notes widget shows the notes you pick in a grid when adding it (or reconfiguring it), and has a button for a new note.
+- Back from a note or reminder opened from a widget leaves the app instead of showing the notes list.
+
+### Changed
+- The reminder time picker is a set of scrolling wheels for hours, minutes and AM/PM instead of a clock dial.
+- Scheduled reminders are grouped under Tomorrow, This week, Next week, This month and Later.
+
 ## 1.5.0 — 2026-11-21
 
 ### Added
