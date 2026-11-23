@@ -6,6 +6,8 @@ plugins {
 }
 
 android {
+    // WorkManager reads its own resources, so tests that schedule sync need them.
+    testOptions.unitTests.isIncludeAndroidResources = true
     namespace = "io.cleannotes.app"
     compileSdk {
         version = release(37) { minorApiLevel = 1 }

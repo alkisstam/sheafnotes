@@ -3,6 +3,8 @@ package io.cleannotes.app
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.Configuration
+import androidx.work.WorkManager
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -45,5 +47,13 @@ class SyncMergeTest {
     @Test fun importedRowsAreMarkedForPush() = runBlocking {
         sync.merge(listOf(note("n2", 10)), emptyList(), emptyList(), emptyList(), savedAt = 99)
         assertEquals(99L, db.dao().noteOnce("n2")!!.savedAt)
+    }
+
+    @Test fun pairingPushesRowsThatCameFromAServer() = runBlocking {
+        WorkManager.initialize(context, Configuration.Builder().setExecutor { it.run() }.build())
+        sync.merge(listOf(note("n3", 10)), emptyList(), emptyList(), emptyList())
+        sync.pair("https://example.com", "t")
+        val from = context.getSharedPreferences("sync", Context.MODE_PRIVATE).getLong("lastPushAt", 0)
+        assertEquals(listOf("n3"), db.dao().notesSince(from).map { it.id })
     }
 }

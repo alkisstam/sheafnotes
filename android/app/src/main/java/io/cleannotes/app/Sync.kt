@@ -66,7 +66,8 @@ class Sync(private val context: Context, private val db: AppDb) {
         val base = url.trim().trimEnd('/') + "/"
         require(base.startsWith("https://")) { "The server address must start with https://" }
         require(token.isNotBlank()) { "The token is empty" }
-        prefs.edit { putString("url", base); putString("token", token.trim()); putLong("seq", 0); putLong("lastPushAt", 0) }
+        // -1, so rows that came from a server (savedAt 0) go to this one too, as after a server rebuild.
+        prefs.edit { putString("url", base); putString("token", token.trim()); putLong("seq", 0); putLong("lastPushAt", -1) }
         paired.value = true
         SyncWorker.schedule(context)
     }

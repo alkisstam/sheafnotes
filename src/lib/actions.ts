@@ -229,8 +229,10 @@ export async function collectOrphanFiles() {
 }
 
 export async function deleteForever(ids: string[]) {
-  await db.notes.bulkDelete(ids);
-  await bury('notes', ids);
+  await db.transaction('rw', db.notes, db.tombstones, async () => {
+    await db.notes.bulkDelete(ids);
+    await bury('notes', ids);
+  });
   await collectOrphanFiles();
   const s = store.getState();
   if (s.noteId && ids.includes(s.noteId)) s.openNote(null);

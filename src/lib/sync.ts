@@ -106,6 +106,8 @@ async function serverSync(): Promise<boolean> {
   const newFiles: PdfFile[] = gotFiles.flatMap(({ f, blob }) => (blob ? [f] : []));
   const blobs: PdfBlob[] = gotFiles.flatMap(({ f, blob }) => (blob ? [{ id: f.id, blob }] : []));
   const newImages: NoteImage[] = gotImages.flatMap(({ meta, blob }) => (blob ? [{ ...meta, blob }] : []));
+  // These writes came from the server, so they must not schedule another sync and backup rewrite.
+  const wasDirty = dirty;
   const r = await mergeSnapshot({
     notes: rows<Note>('notes'),
     notebooks: rows<Notebook>('notebooks'),
@@ -114,6 +116,11 @@ async function serverSync(): Promise<boolean> {
     blobs,
     images: newImages,
   });
+  dirty = wasDirty;
+  if (!dirty) {
+    clearTimeout(timer);
+    timer = undefined;
+  }
   await setMeta('serverSeq', seq);
   // A restore or file merge during this sync may have moved the marker back; keep that.
   if (((await getMeta<number>('lastPushAt')) ?? 0) >= pushFrom) await setMeta('lastPushAt', startedAt);

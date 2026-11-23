@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { baseNote, deleteForever } from '../src/lib/actions';
 import { importBackup } from '../src/lib/backup';
 import { db } from '../src/lib/db';
@@ -48,6 +48,32 @@ it('moves notes, images and deletes between devices through the server', async (
   await freshDevice();
   expect(await db.notes.get(gone.id)).toBeUndefined();
   expect(await db.notes.get(keep.id)).toBeDefined();
+});
+
+it('does not schedule another sync for what it just pulled', async () => {
+  await db.notes.add(baseNote({ title: 'pulled' }));
+  await syncNow();
+  await Promise.all(db.tables.map((t) => t.clear()));
+  await syncNow();
+  // Only the sync's own one-minute timer is faked; fetch needs real timers.
+  const realSet = globalThis.setTimeout;
+  const realClear = globalThis.clearTimeout;
+  const pending = new Set<unknown>();
+  const set = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...rest: unknown[]) => {
+    if (ms !== 60_000) return realSet(fn, ms, ...rest);
+    const id = { fn };
+    pending.add(id);
+    return id;
+  }) as typeof setTimeout);
+  const clear = vi.spyOn(globalThis, 'clearTimeout').mockImplementation((id) => (pending.has(id) ? void pending.delete(id) : realClear(id)));
+  try {
+    await enableServerSync('secret');
+    expect(await db.notes.count()).toBeGreaterThan(0);
+    expect(pending.size).toBe(0);
+  } finally {
+    set.mockRestore();
+    clear.mockRestore();
+  }
 });
 
 it('passes on old edits that arrive through a backup file', async () => {
