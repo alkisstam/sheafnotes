@@ -8,6 +8,7 @@
 ### Fixed
 - The Reminders widget no longer turns into the Tasks widget after a while.
 - A new to-do made with Enter no longer takes the reminder time of the to-do above it.
+- Turning sync off and on again sends the notes this phone got from other devices too, so a rebuilt server gets everything.
 
 ## 1.6.0 — 2026-11-22
 

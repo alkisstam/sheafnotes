@@ -11,6 +11,8 @@
 ### Fixed
 - A new to-do made with Enter no longer takes the reminder time of the to-do above it.
 - Start at login keeps working after the AppImage is moved or renamed, without turning it off and on again.
+- Deleting a note forever can no longer leave it on other devices if the app closes halfway through.
+- After pulling changes from the sync server, the app no longer syncs and rewrites the auto-backup file again a minute later.
 
 ## 1.3.0 — 2026-11-21
 
