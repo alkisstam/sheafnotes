@@ -68,6 +68,10 @@ app.whenReady().then(() => {
   try {
     server = fs.readFileSync(serverFile(), 'utf8').trim();
   } catch {}
+  // A moved or renamed AppImage would leave the login entry pointing at a missing file. Dev runs (no APPIMAGE) leave it alone.
+  try {
+    if (process.platform === 'linux' && process.env.APPIMAGE && autostart() && !fs.readFileSync(autostartFile(), 'utf8').includes(`"${process.env.APPIMAGE}"`)) setAutostart(true);
+  } catch {}
   try {
     prefs = { ...prefs, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) };
   } catch {}
