@@ -320,12 +320,14 @@ class App : Application() {
         sync.schedule()
     }
 
-    /** Same as deleteNotebook() in src/lib/actions.ts: its notes stay, outside any notebook. */
-    suspend fun deleteNotebook(id: String) {
+    /** Same as deleteNotebook() in src/lib/actions.ts: its notes stay, outside any notebook, or go to the Trash with [trash]. */
+    suspend fun deleteNotebook(id: String, trash: Boolean = false) {
         stamped { now ->
             val dao = db.dao()
             for (n in dao.notesIn(id)) {
-                dao.put(noteRow(JSONObject(n.raw).put("notebookId", JSONObject.NULL).put("updatedAt", now)).copy(savedAt = now))
+                val raw = JSONObject(n.raw).put("notebookId", JSONObject.NULL).put("updatedAt", now)
+                if (trash && raw.isNull("trashedAt")) raw.put("trashedAt", now)
+                dao.put(noteRow(raw).copy(savedAt = now))
             }
             dao.deleteNotebookNow(id)
             dao.put(TombstoneRow(id, "notebooks", now))

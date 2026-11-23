@@ -48,6 +48,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Checkbox
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -655,12 +658,22 @@ fun NoteList(
     }
     deleting?.let { nb ->
         val count = all.count { it.notebookId == nb.id }
+        var trash by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("Delete \"${nb.name.ifBlank { "Untitled" }}\"?") },
-            text = { Text(if (count == 0) "The notebook is empty." else "Its $count ${if (count == 1) "note stays" else "notes stay"}, outside any notebook.") },
+            text = {
+                if (count == 0) Text("The notebook is empty.")
+                else Column {
+                    Text(if (trash) "Its $count ${if (count == 1) "note goes" else "notes go"} to the Trash." else "Its $count ${if (count == 1) "note stays" else "notes stay"}, outside any notebook.")
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp).toggleable(trash, role = Role.Checkbox) { trash = it }, verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(trash, null)
+                        Text("Also move its notes to Trash", Modifier.padding(start = 8.dp))
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = { deleting = null; onView("all"); app.scope.launch { app.deleteNotebook(nb.id) } }) {
+                TextButton(onClick = { deleting = null; onView("all"); app.scope.launch { app.deleteNotebook(nb.id, trash) } }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },

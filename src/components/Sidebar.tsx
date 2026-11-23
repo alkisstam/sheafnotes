@@ -248,10 +248,11 @@ export function Sidebar({ notes, notebooks }: { notes: Note[]; notebooks: Notebo
                         setDialog({
                           kind: 'confirm',
                           title: `Delete "${b.name}"?`,
-                          body: 'Its notes are kept and stay available in All notes.',
+                          body: 'Its notes are kept and stay available in All notes, unless you move them to Trash.',
+                          check: 'Also move its notes to Trash',
                           confirm: 'Delete notebook',
                           danger: true,
-                          onConfirm: () => void deleteNotebook(b.id),
+                          onConfirm: (trash) => void deleteNotebook(b.id, trash),
                         }),
                     },
                   ]}

@@ -304,14 +304,22 @@ export async function createNotebook(name: string, open = true) {
 export const renameNotebook = (id: string, name: string) =>
   db.notebooks.update(id, { name: name.trim(), updatedAt: Date.now() });
 
-export async function deleteNotebook(id: string) {
+export async function deleteNotebook(id: string, trash = false) {
+  flushEditor();
+  const now = Date.now();
+  const ids = await db.notes.where('notebookId').equals(id).primaryKeys();
   await db.transaction('rw', db.notes, db.notebooks, db.tombstones, async () => {
-    await db.notes.where('notebookId').equals(id).modify({ notebookId: null, updatedAt: Date.now() });
+    await db.notes.where('notebookId').equals(id).modify((n) => {
+      n.notebookId = null;
+      n.updatedAt = now;
+      if (trash) n.trashedAt ??= now;
+    });
     await db.notebooks.delete(id);
     await bury('notebooks', [id]);
   });
   const s = store.getState();
   if (s.view.type === 'notebook' && s.view.id === id) s.setView({ type: 'all' });
+  if (trash && s.noteId && ids.includes(s.noteId)) s.openNote(null);
 }
 
 export async function retag(from: string, to: string) {

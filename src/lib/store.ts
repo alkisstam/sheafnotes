@@ -37,7 +37,7 @@ export interface Toast {
   sticky?: boolean;
 }
 export type DialogState =
-  | { kind: 'confirm'; title: string; body?: string; confirm: string; danger?: boolean; onConfirm: () => void }
+  | { kind: 'confirm'; title: string; body?: string; check?: string; confirm: string; danger?: boolean; onConfirm: (checked: boolean) => void }
   | { kind: 'prompt'; title: string; label: string; value: string; confirm: string; hint?: string; allowEmpty?: boolean; onConfirm: (value: string) => void }
   | { kind: 'settings' }
   | { kind: 'noteColor'; noteIds: string[] }

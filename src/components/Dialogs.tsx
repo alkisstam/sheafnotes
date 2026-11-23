@@ -586,6 +586,7 @@ export function Dialogs() {
   const dialog = useStore((s) => s.dialog);
   const setDialog = useStore((s) => s.setDialog);
   const setSelected = useStore((s) => s.setSelected);
+  const checked = useRef(false);
   const close = () => setDialog(null);
   if (!dialog) return null;
   if (dialog.kind === 'settings') return <Settings close={close} />;
@@ -598,13 +599,19 @@ export function Dialogs() {
   return (
     <Modal title={dialog.title} onClose={close}>
       {dialog.body && <p>{dialog.body}</p>}
+      {dialog.check && (
+        <div className="settings-checks">
+          <label><input type="checkbox" onChange={(e) => (checked.current = e.target.checked)} /> {dialog.check}</label>
+        </div>
+      )}
       <footer>
         <button type="button" className="btn" onClick={close} autoFocus>Cancel</button>
         <button
           type="button"
           className={dialog.danger ? 'btn danger' : 'btn primary'}
           onClick={() => {
-            dialog.onConfirm();
+            dialog.onConfirm(checked.current);
+            checked.current = false;
             close();
           }}
         >
