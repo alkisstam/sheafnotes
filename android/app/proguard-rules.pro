@@ -6,3 +6,5 @@
 
 # Glance builds widget click callbacks by reflection from their class name.
 -keep class * implements androidx.glance.appwidget.action.ActionCallback { <init>(); }
+# Glance finds a widget's ids by its class; R8 merging widget classes makes one widget's update render into another.
+-keep class * extends androidx.glance.appwidget.GlanceAppWidget
