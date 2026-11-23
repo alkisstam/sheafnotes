@@ -1,5 +1,14 @@
 # Changelog — Android app
 
+## 1.6.1 — 2026-11-23
+
+### Added
+- Deleting a notebook can also move its notes to the Trash.
+
+### Fixed
+- The Reminders widget no longer turns into the Tasks widget after a while.
+- A new to-do made with Enter no longer takes the reminder time of the to-do above it.
+
 ## 1.6.0 — 2026-11-22
 
 ### Added

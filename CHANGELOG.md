@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.0 — 2026-11-23
+
+### Added
+- Deleting a notebook can also move its notes to the Trash.
+
+### Changed
+- Scheduled reminders are grouped under Tomorrow, This week, Next week, This month and Later.
+
+### Fixed
+- A new to-do made with Enter no longer takes the reminder time of the to-do above it.
+- Start at login keeps working after the AppImage is moved or renamed, without turning it off and on again.
+
 ## 1.3.0 — 2026-11-21
 
 ### Added
