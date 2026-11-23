@@ -134,7 +134,7 @@ export const TaskItemDue = TaskItem.extend({
             }
             const fresh = crypto.randomUUID();
             seen.add(fresh);
-            tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, id: fresh, ...(id ? { due: null } : {}) });
+            tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, id: fresh, ...(id ? { due: null, remind: null } : {}) });
             changed = true;
           });
           return changed ? tr.setMeta('addToHistory', false) : null;
