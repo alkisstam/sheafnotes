@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 — 2026-11-25
 
 ### Added
 - Lock note in a note's menu encrypts its content with AES-256, under one password for the whole app. Titles, tags and notebooks stay visible; locked notes show "Locked" in the list and ask for the password to open. They lock again after a few minutes without use (set in Settings → Locked notes), when the computer locks or sleeps, or when the desktop app hides to the tray. Notes stay encrypted when synced and backed up, and open on the Android app with the same password.
