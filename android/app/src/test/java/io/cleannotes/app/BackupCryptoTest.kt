@@ -22,7 +22,7 @@ import java.io.File
 @Config(sdk = [35])
 class BackupCryptoTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
-    private val db = Room.inMemoryDatabaseBuilder(context, AppDb::class.java).build()
+    private val db = Room.inMemoryDatabaseBuilder(context, AppDb::class.java).allowMainThreadQueries().build()
     private val sync = Sync(context, db)
     private val backup = Backup(context, db, sync)
 
