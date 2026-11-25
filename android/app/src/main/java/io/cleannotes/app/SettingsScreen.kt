@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -105,7 +106,7 @@ fun SettingsScreen(app: App, onBack: () -> Unit, onConnect: () -> Unit) {
     var unlocking by remember { mutableStateOf(false) }
     var changing by remember { mutableStateOf(false) }
     val unlocked by app.lock.unlocked.collectAsState()
-    var lockAfter by remember { mutableStateOf(app.lock.lockAfterMinutes) }
+    var lockAfter by remember { mutableIntStateOf(app.lock.lockAfterMinutes) }
     var hasPassword by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(unlocked) { hasPassword = app.lock.hasPassword() }
 

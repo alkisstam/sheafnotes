@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.layout.Box
@@ -53,7 +54,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.util.Locale
 
 /** The Daily notes page: the web's calendar on top, then the picked day's note and the reminders due that day. */
 @Composable
@@ -140,7 +140,7 @@ private fun Calendar(today: String, selected: String, withNotes: Set<String>, on
     val ym = YearMonth.parse(month)
     val weekStart = remember { firstDayOfWeek() }
     val grid = monthGrid(ym.year, ym.monthValue, weekStart)
-    val locale = Locale.getDefault()
+    val locale = LocalConfiguration.current.locales[0]
     val title = ym.atDay(1).format(DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "MMMMyyyy")))
     val colors = MaterialTheme.colorScheme
     Column(Modifier.padding(12.dp, 4.dp, 12.dp, 12.dp)) {

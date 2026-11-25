@@ -3,7 +3,6 @@ package io.cleannotes.app
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.net.toUri
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,7 +85,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.temporal.WeekFields
-import java.util.Locale
 
 /** Actions the widgets send to MainActivity, besides Reminders.OPEN_NOTE. */
 object WidgetActions {
@@ -99,7 +98,7 @@ private val WidgetColors = ColorProviders(light = Day, dark = Night)
 
 // Each row's intent gets its own data, or the launcher would merge their PendingIntents into one.
 private fun open(ctx: Context, action: String, vararg extras: Pair<String, String?>): Action =
-    actionStartActivity(Intent(ctx, MainActivity::class.java).setAction(action).setData(Uri.parse("sheaf://${extras.joinToString("/") { it.second.orEmpty() }}"))
+    actionStartActivity(Intent(ctx, MainActivity::class.java).setAction(action).setData("sheaf://${extras.joinToString("/") { it.second.orEmpty() }}".toUri())
         .putExtra("widget", true).apply { extras.forEach { (k, v) -> putExtra(k, v) } })
 
 private fun openNote(ctx: Context, id: String) = open(ctx, Reminders.OPEN_NOTE, "noteId" to id)
@@ -192,7 +191,7 @@ class RemindersWidget : GlanceAppWidget() {
             val notes by app.db.dao().liveNotes().collectAsState(first)
             val today = LocalDate.now()
             val g = groupReminders(reminderItems(notes), today)
-            val rows = (listOf("Today" to g.today) + scheduledSections(g.scheduled, today, WeekFields.of(Locale.getDefault()).firstDayOfWeek))
+            val rows = (listOf("Today" to g.today) + scheduledSections(g.scheduled, today, WeekFields.of(context.resources.configuration.locales[0]).firstDayOfWeek))
                 .filter { it.second.isNotEmpty() }.flatMap { (k, v) -> listOf(k) + v }
             val colors = notes.associate { it.id to color(it) }
             WidgetFrame("Reminders", R.drawable.ic_plus, "New reminder", open(context, WidgetActions.NEW_REMINDER), "No reminders", rows) { r ->

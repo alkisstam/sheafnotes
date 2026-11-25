@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.net.toUri
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -345,7 +346,7 @@ fun NoteView(app: App, note: NoteRow, state: NoteViewState, pdf: String?, path: 
                 webViewClient = object : WebViewClientCompat() {
                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                         val url = request.url
-                        val key = url.path?.removePrefix("/picked/")?.takeIf { url.host == Uri.parse(ORIGIN).host && it != url.path }
+                        val key = url.path?.removePrefix("/picked/")?.takeIf { url.host == ORIGIN.toUri().host && it != url.path }
                             ?: return loader.shouldInterceptRequest(url)
                         val uri = picked.remove(key) ?: return null
                         return WebResourceResponse(ctx.contentResolver.getType(uri), null, ctx.contentResolver.openInputStream(uri))

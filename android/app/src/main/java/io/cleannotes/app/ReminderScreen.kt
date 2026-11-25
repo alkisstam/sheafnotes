@@ -117,7 +117,7 @@ fun ReminderScreen(app: App, id: String?, attach: String?, task: Pair<String, St
         } != null
     }
     var editing by rememberSaveable { mutableStateOf(!existing) }
-    var rev by rememberSaveable { mutableStateOf(0) }
+    var rev by rememberSaveable { mutableIntStateOf(0) }
     key(rev) {
         ReminderForm(app, id, attach, task, onClose, onOpenNote, editing, if (existing) { on, drop -> editing = on; if (drop) rev++ } else null)
     }
