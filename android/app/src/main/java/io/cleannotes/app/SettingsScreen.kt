@@ -75,21 +75,39 @@ fun SettingsScreen(app: App, onBack: () -> Unit, onConnect: () -> Unit) {
             }
         }
     }
+    // Held from the password dialog until the system's file dialog returns; memory only.
+    var exportPassword by remember { mutableStateOf<String?>(null) }
+    var askExportPassword by remember { mutableStateOf(false) }
+    var encryptedImport by remember { mutableStateOf<android.net.Uri?>(null) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) backupJob("Exporting") { app.backup.export(uri); "Backup saved." }
     }
+    val encryptedExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val pw = exportPassword
+        exportPassword = null
+        if (uri != null && pw != null) backupJob("Exporting") { app.backup.export(uri, pw); "Encrypted backup saved." }
+    }
+    val summary = { r: Sync.MergeResult ->
+        // Same summary as the web's import.
+        if (r.added + r.updated + r.deleted == 0) "Nothing new: this device already has everything in that backup."
+        else listOfNotNull(
+            r.added.takeIf { it > 0 }?.let { "$it added" },
+            r.updated.takeIf { it > 0 }?.let { "$it updated" },
+            r.deleted.takeIf { it > 0 }?.let { "$it deleted" },
+        ).joinToString(", ").replaceFirstChar { it.uppercase() } + "."
+    }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) backupJob("Importing") {
-            val r = app.backup.import(uri)
-            // Same summary as the web's import.
-            if (r.added + r.updated + r.deleted == 0) "Nothing new: this device already has everything in that backup."
-            else listOfNotNull(
-                r.added.takeIf { it > 0 }?.let { "$it added" },
-                r.updated.takeIf { it > 0 }?.let { "$it updated" },
-                r.deleted.takeIf { it > 0 }?.let { "$it deleted" },
-            ).joinToString(", ").replaceFirstChar { it.uppercase() } + "."
+        if (uri != null) scope.launch {
+            if (app.backup.isEncrypted(uri)) encryptedImport = uri
+            else backupJob("Importing") { summary(app.backup.import(uri)) }
         }
     }
+    var unlocking by remember { mutableStateOf(false) }
+    var changing by remember { mutableStateOf(false) }
+    val unlocked by app.lock.unlocked.collectAsState()
+    var lockAfter by remember { mutableStateOf(app.lock.lockAfterMinutes) }
+    var hasPassword by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(unlocked) { hasPassword = app.lock.hasPassword() }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -138,12 +156,42 @@ fun SettingsScreen(app: App, onBack: () -> Unit, onConnect: () -> Unit) {
                     Button(onClick = onConnect) { Text("Connect to server") }
                 }
             }
+            Section("Locked notes") {
+                Text(
+                    when (hasPassword) {
+                        null -> ""
+                        false -> "No password is set. Choose Lock note in a note's menu to set one."
+                        else -> if (unlocked) "Unlocked for now." else "Locked."
+                    },
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when {
+                        hasPassword == false -> Button(onClick = { unlocking = true }) { Text("Set password") }
+                        unlocked -> Button(onClick = { app.lock.lockNow() }) { Text("Lock now") }
+                        else -> Button(onClick = { unlocking = true }) { Text("Unlock") }
+                    }
+                    if (hasPassword == true && app.lock.localVault() != null) OutlinedButton(onClick = { changing = true }) { Text("Change password") }
+                }
+                Text("Lock again after the app is away for", style = MaterialTheme.typography.labelLarge)
+                listOf(1 to "1 minute", 5 to "5 minutes", 15 to "15 minutes", 60 to "1 hour", 0 to "Only when I lock or the app restarts").forEach { (min, label) ->
+                    Choice(label, lockAfter == min) { app.lock.lockAfterMinutes = min; lockAfter = min }
+                }
+                Text(
+                    "Locked notes are encrypted with AES-256. Their titles, tags and notebooks stay visible, and their PDFs and images are not encrypted. If you forget the password, locked notes cannot be recovered.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Section("Backup") {
                 Text("One file with every note, notebook, PDF and image, in the web app's backup format. Importing merges: the newer edit of each note wins.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !busy, onClick = { exporter.launch("sheaf-notes-backup-${dateKey()}.json") }) { Text("Export") }
-                    OutlinedButton(enabled = !busy, onClick = { importer.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }) { Text("Import") }
+                    OutlinedButton(enabled = !busy, onClick = { askExportPassword = true }) { Text("Export encrypted") }
                 }
+                OutlinedButton(enabled = !busy, onClick = { importer.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }) { Text("Import") }
+                Text(
+                    "Encrypted backups use AES-256 with a key made from your password. Without the password they cannot be restored.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 backupNote?.let { Text(it) }
             }
             Section("Storage") {
@@ -152,6 +200,52 @@ fun SettingsScreen(app: App, onBack: () -> Unit, onConnect: () -> Unit) {
                 Text("Sheaf Notes $version", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+    if (unlocking) UnlockDialog(app) { unlocking = false }
+    if (changing) PasswordDialog(
+        title = "Change password",
+        body = "Locked notes stay locked. Other devices use the new password once they sync.",
+        confirm = "Change",
+        repeat = true,
+        current = true,
+        onSubmit = { pw, cur ->
+            try {
+                app.lock.changePassword(cur, pw)
+                null
+            } catch (e: Crypto.WrongPassword) {
+                "The current password is not right."
+            }
+        },
+        onDismiss = { changing = false },
+    )
+    if (askExportPassword) PasswordDialog(
+        title = "Export encrypted backup",
+        body = "The backup is encrypted with AES-256, using a key made from this password. Keep the password safe: without it the backup cannot be restored.",
+        confirm = "Continue",
+        repeat = true,
+        onSubmit = { pw, _ ->
+            exportPassword = pw
+            encryptedExporter.launch("sheaf-notes-backup-${dateKey()}.sheafenc")
+            null
+        },
+        onDismiss = { askExportPassword = false },
+    )
+    encryptedImport?.let { uri ->
+        PasswordDialog(
+            title = "Restore encrypted backup",
+            body = "Enter the password this backup was encrypted with.",
+            confirm = "Restore",
+            onSubmit = { pw, _ ->
+                try {
+                    val r = app.backup.import(uri, pw)
+                    backupNote = summary(r)
+                    null
+                } catch (e: Crypto.WrongPassword) {
+                    "Wrong password, or the file is damaged."
+                }
+            },
+            onDismiss = { encryptedImport = null },
+        )
     }
 }
 

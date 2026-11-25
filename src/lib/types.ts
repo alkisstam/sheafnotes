@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import type { Sealed, VaultHeader } from './crypto';
 
 export interface Note {
   id: string;
@@ -33,6 +34,16 @@ export interface Note {
   noteRef?: string | null;
   /** Which editor instance wrote last, so an editor ignores its own echoes. */
   writer?: string;
+  /** On locked notes: the encrypted {content, text}. content is then an empty doc and text is empty. See lock.ts. */
+  locked?: LockedContent | null;
+  /** On locked notes: the PDF and image ids inside, so their files are kept. */
+  fileIds?: string[] | null;
+}
+
+export interface LockedContent extends Sealed {
+  v: 1;
+  /** A copy of the vault the note was locked with, so any device with the password can open it. */
+  vault: VaultHeader;
 }
 
 export interface Notebook {

@@ -1,5 +1,5 @@
 import {
-  Archive, ArchiveRestore, ArrowLeft, Bell, ArrowRight, BookOpen, ChevronLeft, ChevronRight, Copy, CornerLeftUp, Download, PanelTop, Palette, Feather, FilePlus, FileSymlink, Redo2, Undo2, Maximize2, Minimize2, Pin, PinOff, Plus, RotateCcw, Share2, Trash2, X,
+  Archive, ArchiveRestore, ArrowLeft, Bell, ArrowRight, BookOpen, ChevronLeft, ChevronRight, Copy, CornerLeftUp, Download, Lock, LockOpen, PanelTop, Palette, Feather, FilePlus, FileSymlink, Redo2, Undo2, Maximize2, Minimize2, Pin, PinOff, Plus, RotateCcw, Share2, Trash2, X,
 } from 'lucide-react';
 import { lazy, Component, Fragment, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createNote, createSubNote, deleteForever, duplicateNote, editTags, journalEdit, openDaily, patchNote, remindNote, restoreNote, trashNote } from '../lib/actions';
@@ -14,6 +14,8 @@ import type { Note, Notebook } from '../lib/types';
 import { Menu, type MenuItem } from './Overlay';
 import { ReminderEditor } from './Reminders';
 import { linkedReminder, parseAt } from '../lib/reminders';
+import { canLock, decryptNote, isOpenable, lockNoteFlow, lockNow, removeLockFlow, unlock } from '../lib/lock';
+import { WrongPassword } from '../lib/crypto';
 
 const remindLabel = (at?: string | null) =>
   parseAt(at)?.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) ?? '';
@@ -26,7 +28,7 @@ export function noteMenuItems(note: Note, editor: Editor | null, reminded = fals
     ...(!isDaily
       ? [
           { label: 'New sub-note', icon: <FilePlus size={14} />, run: () => void createSubNote(note.id) },
-          { label: 'Duplicate', icon: <Copy size={14} />, run: () => void duplicateNote(note.id) },
+          ...(!note.locked ? [{ label: 'Duplicate', icon: <Copy size={14} />, run: () => void duplicateNote(note.id) }] : []),
           {
             label: note.pinned ? 'Unpin' : 'Pin to top',
             icon: note.pinned ? <PinOff size={14} /> : <Pin size={14} />,
@@ -40,6 +42,11 @@ export function noteMenuItems(note: Note, editor: Editor | null, reminded = fals
     ...(note.kind !== 'reminder' ? [{ label: reminded ? 'Edit reminder' : 'Add reminder', icon: <Bell size={14} />, run: () => void remindNote(note.id) }] : []),
     ...(shareFormats().length ? [{ label: 'Share', icon: <Share2 size={14} />, run: () => store.getState().setDialog({ kind: 'export', noteIds: [note.id], mode: 'share' }) }] : []),
     { label: 'Export', icon: <Download size={14} />, run: () => store.getState().setDialog({ kind: 'export', noteIds: [note.id], mode: 'save' }) },
+    ...(canLock(note)
+      ? [note.locked
+          ? { label: 'Remove lock', icon: <LockOpen size={14} />, run: () => void removeLockFlow(note.id) }
+          : { label: 'Lock note', icon: <Lock size={14} />, run: () => void lockNoteFlow(note.id) }]
+      : []),
     ...(!isDaily
       ? [{
           label: note.archivedAt ? 'Unarchive' : 'Archive',
@@ -189,6 +196,56 @@ function wordCount(text: string) {
   return text.trim() ? text.trim().split(/\s+/u).length : 0;
 }
 
+/** A locked note with its content decrypted, or null while it cannot be opened. Plain notes pass through. */
+function useOpened(note: Note): Note | null {
+  const unlocked = useStore((s) => s.unlocked);
+  const [plain, setPlain] = useState<Note | null>(note.locked ? null : note);
+  useEffect(() => {
+    if (!note.locked) return setPlain(note);
+    if (!unlocked || !isOpenable(note)) return setPlain(null);
+    let live = true;
+    decryptNote(note).then(
+      (d) => live && setPlain({ ...note, ...d }),
+      () => live && setPlain(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [note, unlocked]);
+  return note.locked ? plain : note;
+}
+
+function LockedPanel() {
+  const [pw, setPw] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="locked-panel">
+      <Lock size={24} strokeWidth={1.5} />
+      <strong>This note is locked</strong>
+      <p>Enter your password to read and edit it.</p>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!pw || busy) return;
+          setBusy(true);
+          setError(null);
+          try {
+            await unlock(pw);
+          } catch (x) {
+            setError(x instanceof WrongPassword ? 'That password is not right.' : (x as Error).message);
+            setBusy(false);
+          }
+        }}
+      >
+        <input type="password" aria-label="Password" autoComplete="current-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} />
+        <button type="submit" className="btn primary" disabled={!pw || busy}>{busy ? 'Unlocking…' : 'Unlock'}</button>
+      </form>
+      {error && <p className="dialog-error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
 function Document({ note, notes, notebooks, allTags }: { note: Note; notes: Note[]; notebooks: Notebook[]; allTags: string[] }) {
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const focusMode = useStore((s) => s.focusMode);
@@ -204,6 +261,7 @@ function Document({ note, notes, notebooks, allTags }: { note: Note; notes: Note
   const isDaily = note.kind === 'daily';
   const reminder = useMemo(() => linkedReminder(notes, note.id), [notes, note.id]);
   const inTrash = Boolean(note.trashedAt);
+  const opened = useOpened(note);
 
   // Re-render on every editor change, so Undo and Redo show whether there is anything to do.
   const [, tick] = useState(0);
@@ -340,6 +398,11 @@ function Document({ note, notes, notebooks, allTags }: { note: Note; notes: Note
             <button type="button" className="icon-btn" aria-label="Redo" title="Redo (Ctrl Shift Z)" disabled={!editor?.can().redo()} onClick={() => editor?.chain().focus().redo().run()}>
               <Redo2 size={15} />
             </button>
+            {note.locked && opened && (
+              <button type="button" className="icon-btn" aria-label="Lock now" title="Lock now" onClick={() => void lockNow()}>
+                <Lock size={15} />
+              </button>
+            )}
             {!isDaily && (
               <button type="button" className="icon-btn" aria-label="New sub-note" title="New sub-note" onClick={() => void createSubNote(note.id)}>
                 <FilePlus size={15} />
@@ -422,12 +485,12 @@ function Document({ note, notes, notebooks, allTags }: { note: Note; notes: Note
             </button>
           )}
           <Boundary message="This note could not be displayed." resetKey={note.id}>
-            <NoteEditor note={note} readOnly={inTrash} />
+            {opened ? <NoteEditor note={opened} readOnly={inTrash} /> : note.locked && !isOpenable(note) ? <LockedPanel /> : null}
           </Boundary>
         </article>
       </div>
       <footer className="doc-status">
-        <span>{wordCount(note.text)} {wordCount(note.text) === 1 ? 'word' : 'words'}</span>
+        <span>{wordCount(opened?.text ?? '')} {wordCount(opened?.text ?? '') === 1 ? 'word' : 'words'}</span>
         <span>Edited {relativeTime(note.updatedAt).toLowerCase()}</span>
       </footer>
     </>

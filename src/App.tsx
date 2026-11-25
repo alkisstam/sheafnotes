@@ -5,6 +5,7 @@ import { clearJournal, createNote, openDaily, recoverJournal } from './lib/actio
 import { db } from './lib/db';
 import { seedIfEmpty } from './lib/seed';
 import { startAutoSync } from './lib/sync';
+import { startAutoLock } from './lib/lock';
 import { startReminders } from './lib/notify';
 import { useStore, store } from './lib/store';
 import { allTagPaths } from './lib/tags';
@@ -23,6 +24,8 @@ declare global {
     desktop?: {
       edit: (role: string) => void;
       onEditMenu: (cb: (p: { x: number; y: number; flags: EditFlags }) => void) => void;
+      /** Locks notes when the computer locks or sleeps, or the window hides to the tray. Missing before 1.5. */
+      onLockScreen?: (cb: () => void) => void;
       syncServer: () => Promise<string>;
       setSyncServer: (url: string) => Promise<void>;
       printPdf: (html: string, name: string) => Promise<boolean>;
@@ -158,6 +161,7 @@ export function App() {
         setReady(true);
         startAutoSync();
         startReminders();
+        void startAutoLock();
       } catch {
         setDbError(true);
       }

@@ -84,6 +84,17 @@ class MainActivity : ComponentActivity() {
         receive(intent)
     }
 
+    // Locked notes lock again when the app comes back after the time chosen in Settings.
+    override fun onStart() {
+        super.onStart()
+        (application as App).lock.onStart()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (application as App).lock.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A rotation or a return from Recents replays the original intent, which must not make a second note.

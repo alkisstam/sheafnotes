@@ -25,6 +25,7 @@ class App : Application() {
     val db by lazy { Room.databaseBuilder(this, AppDb::class.java, "clean-notes").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build() }
     val sync by lazy { Sync(this, db) }
     val backup by lazy { Backup(this, db, sync) }
+    val lock by lazy { Lock(this) }
 
     // Settings, kept on this device only, as the web keeps its theme.
     val ui by lazy { getSharedPreferences("ui", MODE_PRIVATE) }
@@ -113,7 +114,12 @@ class App : Application() {
     private suspend fun <T> stamped(block: suspend (Long) -> T) = db.withTransaction { block(System.currentTimeMillis()) }
 
     suspend fun saveNote(note: JSONObject) {
-        stamped { now -> db.dao().put(noteRow(note).copy(savedAt = now)) }
+        stamped { now ->
+            // The editor works on the decrypted note, without its lock fields; a locked note is encrypted again before it is stored.
+            val stored = note.optJSONObject("locked")?.let { null } ?: db.dao().noteOnce(note.getString("id"))
+            val row = if (stored != null && stored.isLocked) lock.resealEdit(note, stored) else note
+            db.dao().put(noteRow(row).copy(savedAt = now))
+        }
         sync.schedule()
     }
 
@@ -155,7 +161,10 @@ class App : Application() {
     @Volatile var sharedFiles: List<android.net.Uri> = emptyList()
 
     suspend fun duplicateNote(id: String) {
-        val src = JSONObject((db.dao().noteOnce(id) ?: return).raw)
+        val row = db.dao().noteOnce(id) ?: return
+        // Its ciphertext is tied to its own id, and the copy should not be readable without the password either.
+        if (row.isLocked) return
+        val src = JSONObject(row.raw)
         saveNote(duplicated(src, UUID.randomUUID().toString(), System.currentTimeMillis()) { UUID.randomUUID().toString() })
     }
 

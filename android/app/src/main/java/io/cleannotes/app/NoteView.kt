@@ -234,8 +234,12 @@ fun NoteView(app: App, note: NoteRow, state: NoteViewState, pdf: String?, path: 
     LaunchedEffect(note.raw, dark, deviceFonts, path, remindAt) {
         // Ids are UUIDs, so a substring match finds exactly the attachments this note uses.
         val used = app.db.dao().attachments().filter { note.raw.contains(it.id) }
+        // A locked note goes to the page decrypted and without its lock fields; saves come back that way and App.saveNote encrypts them.
+        val secret = note.isLocked
+        val shown = runCatching { app.lock.open(JSONObject(note.raw)) }.getOrNull() ?: return@LaunchedEffect
         payload = JSONObject()
-            .put("note", JSONObject(note.raw))
+            .put("note", shown)
+            .put("secret", secret)
             .put("images", JSONArray(used.filter { it.tbl == "images" }.map { JSONObject(it.raw) }))
             .put("files", JSONArray(used.filter { it.tbl == "files" }.map { JSONObject(it.raw) }))
             .put("dark", dark)
@@ -366,6 +370,8 @@ fun NoteView(app: App, note: NoteRow, state: NoteViewState, pdf: String?, path: 
         onRelease = { web ->
             state.web = null
             web.destroy()
+            // The page caches the open note in its own storage; a locked one must not stay there readable.
+            if (note.isLocked) android.webkit.WebStorage.getInstance().deleteAllData()
         },
     )
 }

@@ -195,7 +195,14 @@ class Exported(val file: File, val name: String, val mime: String)
 
 private val MIME = mapOf("pdf" to "application/pdf", "txt" to "text/plain", "json" to "application/json", "html" to "text/html")
 
-private suspend fun rows(app: App, ids: List<String>) = ids.mapNotNull { app.db.dao().noteOnce(it) }
+/** The notes as they read. Locked ones are decrypted, so locked notes must be unlocked first. */
+private suspend fun rows(app: App, ids: List<String>) = ids.mapNotNull { app.db.dao().noteOnce(it) }.map { row ->
+    if (!row.isLocked) row
+    else {
+        check(app.lock.isOpenable(row)) { "Unlock your locked notes first." }
+        noteRow(app.lock.open(JSONObject(row.raw)))
+    }
+}
 
 private suspend fun pageFor(app: App, notes: List<NoteRow>): String {
     val images = app.db.dao().attachments().filter { it.tbl == "images" }.associateBy { it.id }
