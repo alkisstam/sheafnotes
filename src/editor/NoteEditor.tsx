@@ -1048,6 +1048,9 @@ export function NoteEditor({ note, readOnly, editorRef }: Props) {
   const pending = useRef<JSONContent | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const noteId = note.id;
+  // Locked notes keep their content out of the plaintext journal.
+  const locked = useRef(false);
+  locked.current = Boolean(note.locked);
 
   const flush = useRef(() => {
     window.clearTimeout(timer.current);
@@ -1227,7 +1230,7 @@ export function NoteEditor({ note, readOnly, editorRef }: Props) {
     const save = () => flush.current();
     registerFlusher(save);
     const onPageHide = () => {
-      if (pending.current) journalEdit(noteId, { content: pending.current });
+      if (pending.current && !locked.current) journalEdit(noteId, { content: pending.current });
       save();
     };
     window.addEventListener('pagehide', onPageHide);

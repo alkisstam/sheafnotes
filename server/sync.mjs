@@ -61,7 +61,12 @@ export async function startServer({ token, dir, port = 0 }) {
       if (n?.type === 'noteImage' && n.attrs?.imageId) used.add(String(n.attrs.imageId));
       n?.content?.forEach(walk);
     };
-    for (const r of Object.values(state.records)) if (r.table === 'notes') walk(r.data?.content);
+    for (const r of Object.values(state.records)) {
+      if (r.table !== 'notes') continue;
+      walk(r.data?.content);
+      // A locked note's content is encrypted; it lists its PDFs and images in the clear.
+      if (Array.isArray(r.data?.fileIds)) for (const id of r.data.fileIds) used.add(String(id));
+    }
     const removed = [];
     for (const [key, r] of Object.entries(state.records)) {
       if ((r.table === 'files' || r.table === 'images') && !used.has(r.id)) {

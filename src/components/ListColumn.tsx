@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  Archive, ArchiveRestore, ArrowDownAZ, CalendarPlus, Check, Clock, Copy, Download, FolderInput, Palette, PinOff, Share2, SquareCheck, Tag, X, FileText, Image as ImageIcon, Menu as MenuIcon, Pin, Plus, RotateCcw, Search, SearchX, Trash2, ChevronDown,
+  Archive, ArchiveRestore, ArrowDownAZ, CalendarPlus, Check, Clock, Copy, Download, FolderInput, Palette, PinOff, Share2, SquareCheck, Tag, X, FileText, Image as ImageIcon, Lock, Menu as MenuIcon, Pin, Plus, RotateCcw, Search, SearchX, Trash2, ChevronDown,
 } from 'lucide-react';
 import { memo, useMemo, useState, type ReactNode } from 'react';
 import { createNote, deleteForever, duplicateNote, nestNote, patchNotes, trashNotes, flushEditor, openDaily, quickAddTask, restoreNote, setTaskAttrs } from '../lib/actions';
@@ -11,6 +11,7 @@ import { dateKey, dueLabel, relativeTime, shortDate } from '../lib/dates';
 import { Calendar } from './Calendar';
 import { imageIdsIn, pdfIdsIn } from '../lib/doc';
 import { formatBytes } from '../lib/pdf';
+import { noteFileIds } from '../lib/lock';
 import { foldQuery, includesFolded, snippet, type Snippet } from '../lib/search';
 import { store, useStore, type SortKey } from '../lib/store';
 import { allTagPaths, nestNotes, noteHasTag } from '../lib/tags';
@@ -112,6 +113,7 @@ const NoteRow = memo(function NoteRow({ note, active, notebook, hit, index, acti
         {selecting && <span className="note-tick">{ticked && <Check size={12} strokeWidth={3} />}</span>}
         <span className="note-row-title">
           {note.pinned && !note.trashedAt && <Pin size={11} aria-label="Pinned" />}
+          {note.locked && <Lock size={11} className="note-lock" aria-label="Locked" />}
           <span>{note.title || 'Untitled'}</span>
         </span>
         <span className="note-row-text">
@@ -121,7 +123,7 @@ const NoteRow = memo(function NoteRow({ note, active, notebook, hit, index, acti
               <Hit s={hit.snippet} />
             </>
           ) : (
-            preview(note.text) || 'No content yet'
+            note.locked ? 'Locked' : preview(note.text) || 'No content yet'
           )}
         </span>
         <span className="note-row-meta">
@@ -354,7 +356,7 @@ export function ListColumn({ notes, notebooks, searchRef }: { notes: Note[]; not
   const nbName = useMemo(() => new Map(notebooks.map((b) => [b.id, b.name])), [notebooks]);
   const ownerOf = useMemo(() => {
     const map = new Map<string, Note>();
-    for (const n of live) for (const id of pdfIdsIn(n.content)) if (!map.has(id)) map.set(id, n);
+    for (const n of live) for (const id of noteFileIds(n)) if (!map.has(id)) map.set(id, n);
     return map;
   }, [live]);
 

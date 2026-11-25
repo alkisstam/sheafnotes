@@ -1,0 +1,47 @@
+{
+  "comment": "Made by the web app (src/lib/crypto.ts). tests/crypto.test.ts and the Android CryptoTest both open these, so the two stay compatible.",
+  "password": "pässwörd ✓",
+  "vault": {
+    "id": "41319c69-b50f-499a-aa96-b304676e7740",
+    "salt": "Iw7nS0BaRB01Z/v37Sl80g==",
+    "iterations": 1000,
+    "iv": "NF4M0mrXTq261ffw",
+    "key": "Zs+/6SpXQZytv1k0uwoH5n7BXPfelKaw1Yf0spQA2UQ8myHrvotTaM+4Zb3BsElP"
+  },
+  "note": {
+    "id": "note-1",
+    "locked": {
+      "v": 1,
+      "vault": {
+        "id": "41319c69-b50f-499a-aa96-b304676e7740",
+        "salt": "Iw7nS0BaRB01Z/v37Sl80g==",
+        "iterations": 1000,
+        "iv": "NF4M0mrXTq261ffw",
+        "key": "Zs+/6SpXQZytv1k0uwoH5n7BXPfelKaw1Yf0spQA2UQ8myHrvotTaM+4Zb3BsElP"
+      },
+      "iv": "anxkkFzQhhY96E8g",
+      "data": "DtF+EShF3amBDxpqOpqJ727IG/KWVg1O7+irsjXKdToLumnxKPtiW57xMyJm2lvz9YQRibeSzvlQ/1r7qt0N1PzqoEAd+1jsQk/pdBsJPpCx0xGF+u4Dy+0t45y0d+Rx1W9BSAgrXA4xNFvRYHMjNuuMd1JRGWArO/Pbb36MSazAWTd3wfWWCboKpkg1I0W+5gQEzM1vXy07oBGyb2Iu3mJyKy5idV1J/A=="
+    },
+    "plain": {
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Secret Καλημέρα"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Secret Καλημέρα"
+    }
+  },
+  "backup": {
+    "file": "U0hFQUZFTkMBAAAAhHsia2RmIjoiUEJLREYyLVNIQTI1NiIsIml0ZXJhdGlvbnMiOjEwMDAsInNhbHQiOiI4OWJjTGl5U0JJYXYxL2Vlcktyanh3PT0iLCJjaXBoZXIiOiJBRVMtMjU2LUdDTSIsImNodW5rIjoxNiwibm9uY2UiOiJQR0ZWR25HSGQxZz0ifQAAACAhJVcvV4BmL7HDDqR9IajG0FJCUFswRdgx9oDaHH8lhAAAACCQtdYX8zebIJlD/z8nIqudEtE8nziVsEpKGY9E1zGCuQAAACA9cf4JIVzdqtu6JdigdRh5sT2Qg+JuGPH9uL8XmbbexAAAACDii0UxxoDFe6eDYTQ/lqlDDuYq0NnRDfjitmifxyU3NQAAACDgBg1k0KD9rA3NrCjqB5zGRAVkhdvQnKshaQl2OfG5TQAAACDJTvhWCkQPhsvIkrixRQlkgqFn3HIMVY3JcWSVGL8uzgAAABd+6qbEcJdcMgZdH66EC1bMJfhb2rTTuQ==",
+    "plain": "{\"format\":\"clean-notes-backup\",\"version\":3,\"notes\":[],\"notebooks\":[],\"files\":[],\"blobs\":[],\"images\":[]}"
+  }
+}

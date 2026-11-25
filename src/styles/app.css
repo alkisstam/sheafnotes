@@ -514,6 +514,15 @@ kbd { font: 500 10.5px var(--font-mono); color: var(--ink-3); }
 .dialog p { color: var(--ink-2); }
 .dialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dialog-hint { font-size: 12px; margin-top: 8px; color: var(--ink-3) !important; }
+.dialog form .field + .field { margin-top: 10px; }
+.dialog form .dialog-hint + .field { margin-top: 12px; }
+.dialog-error { font-size: 12px; margin-top: 10px; color: var(--accent) !important; font-weight: 500; }
+.locked-panel { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px 16px; text-align: center; color: var(--ink-3); }
+.locked-panel strong { color: var(--ink-2); font-weight: 600; }
+.locked-panel form { display: flex; gap: 8px; width: min(320px, 100%); margin-top: 6px; }
+.locked-panel input { flex: 1; min-width: 0; height: 36px; padding: 0 10px; font-size: 14px; color: var(--ink); background: var(--paper); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.locked-panel .dialog-error { margin: 0; }
+.note-lock { flex: none; color: var(--ink-3); vertical-align: -1px; }
 .field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .field input, .settings-row input { height: 36px; padding: 0 10px; font-size: 14px; font-weight: 400; color: var(--ink); background: var(--paper); border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .field input:focus-visible, .settings-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -534,6 +543,8 @@ kbd { font: 500 10.5px var(--font-mono); color: var(--ink-3); }
 .settings-section:first-of-type { border-top: 0; padding-top: 5px; }
 .settings-section h3 { font-size: 12.5px; font-weight: 600; margin-bottom: 7px; }
 .settings-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.settings-inline { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.settings-inline select { height: 32px; padding: 0 8px; font-size: 13px; color: var(--ink); background: var(--paper); border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .settings-stat { display: flex; gap: 7px; align-items: flex-start; margin-top: 7px; font-size: 12.5px; }
 .settings-stat svg { flex: none; margin-top: 2px; }
 .segmented { display: inline-flex; padding: 2px; background: var(--hover); border-radius: 8px; }

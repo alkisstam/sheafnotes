@@ -1,6 +1,6 @@
 import { flushEditor } from './actions';
-import { imageIdsIn, pdfIdsIn } from './doc';
 import { mergeSnapshot, pullFromFile, pushToFile } from './backup';
+import { noteFileIds } from './lock';
 import { db, getMeta, setMeta, writeListeners } from './db';
 import { store } from './store';
 import type { Note, NoteImage, Notebook, PdfBlob, PdfFile, Tombstone } from './types';
@@ -53,10 +53,10 @@ async function serverSync(): Promise<boolean> {
   ]);
   // The server drops PDFs and images no note uses, so send each pushed note's own along with it, in case they were dropped.
   const has = new Set([...files, ...images].map((f) => f.id));
-  const fileIds = [...new Set(notes.flatMap((n) => pdfIdsIn(n.content)))].filter((id) => !has.has(id));
-  const imageIds = [...new Set(notes.flatMap((n) => imageIdsIn(n.content)))].filter((id) => !has.has(id));
-  files.push(...(await db.files.bulkGet(fileIds)).filter((f) => !!f));
-  images.push(...(await db.images.bulkGet(imageIds)).filter((i) => !!i));
+  // Locked notes list PDFs and images together, so look each id up in both tables.
+  const ids = [...new Set(notes.flatMap(noteFileIds))].filter((id) => !has.has(id));
+  files.push(...(await db.files.bulkGet(ids)).filter((f) => !!f));
+  images.push(...(await db.images.bulkGet(ids)).filter((i) => !!i));
   // Bytes go first, so no device ever sees a file record whose bytes are missing.
   const tooBig = new Set<string>();
   for (const f of files) {

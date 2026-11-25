@@ -19,12 +19,16 @@ import java.util.UUID
 class Backup(private val context: Context, private val db: AppDb, private val sync: Sync) {
     private val blobDir = File(context.filesDir, "blobs")
 
-    /** Streams straight to the file, so large PDFs are never held in memory. */
-    suspend fun export(uri: Uri) = withContext(Dispatchers.IO) {
+    /** Thrown when a backup is encrypted and no password was given. */
+    class NeedsPassword : Exception("This backup is encrypted. Enter its password to restore it.")
+
+    /** Streams straight to the file, so large PDFs are never held in memory. With a password, the file is encrypted as it is written. */
+    suspend fun export(uri: Uri, password: String? = null) = withContext(Dispatchers.IO) {
         val dao = db.dao()
         val attachments = dao.attachments().filter { File(blobDir, it.id).exists() }
         val (files, images) = attachments.partition { it.tbl == "files" }
-        val out = context.contentResolver.openOutputStream(uri, "wt") ?: error("The file could not be written.")
+        val file = context.contentResolver.openOutputStream(uri, "wt") ?: error("The file could not be written.")
+        val out = if (password != null) Crypto.EncryptingOutputStream(file.buffered(), password) else file
         out.buffered().use { o ->
             fun w(s: String) = o.write(s.toByteArray())
             fun list(items: List<String>) = items.joinToString(",", "[", "]")
@@ -58,7 +62,12 @@ class Backup(private val context: Context, private val db: AppDb, private val sy
     }
 
     /** Merges a backup into this device: per row the newer edit wins, as when syncing. */
-    suspend fun import(uri: Uri): Sync.MergeResult = withContext(Dispatchers.IO) {
+    /** Whether the file is an encrypted backup, so the caller can ask for its password first. */
+    suspend fun isEncrypted(uri: Uri) = withContext(Dispatchers.IO) {
+        context.contentResolver.openInputStream(uri)?.use(Crypto::startsEncrypted) ?: false
+    }
+
+    suspend fun import(uri: Uri, password: String? = null): Sync.MergeResult = withContext(Dispatchers.IO) {
         val notes = mutableListOf<JSONObject>()
         val notebooks = mutableListOf<JSONObject>()
         val tombstones = mutableListOf<JSONObject>()
@@ -67,8 +76,17 @@ class Backup(private val context: Context, private val db: AppDb, private val sy
         val written = mutableListOf<String>()
         var format: String? = null
         try {
-            val input = context.contentResolver.openInputStream(uri) ?: error("The file could not be read.")
-            JsonReader(input.buffered().reader()).use { r ->
+            val raw = context.contentResolver.openInputStream(uri)?.buffered() ?: error("The file could not be read.")
+            raw.mark(16)
+            val encrypted = Crypto.startsEncrypted(raw)
+            raw.reset()
+            val input = when {
+                !encrypted -> raw
+                password == null -> { raw.close(); throw NeedsPassword() }
+                // Decrypted as it is read; a wrong password fails on the first chunk, a changed file wherever it was changed.
+                else -> Crypto.DecryptingInputStream(raw, password).buffered()
+            }
+            JsonReader(input.reader()).use { r ->
                 if (r.peek() != JsonToken.BEGIN_OBJECT) throw IllegalArgumentException(NOT_BACKUP)
                 r.beginObject()
                 while (r.hasNext()) when (r.nextName()) {
@@ -109,6 +127,7 @@ class Backup(private val context: Context, private val db: AppDb, private val sy
             written.filter { it !in kept }.forEach { File(blobDir, it).delete() }
             // Same messages as the web: broken JSON, or JSON of the wrong shape.
             throw when (e) {
+                is NeedsPassword, is Crypto.WrongPassword -> e
                 is MalformedJsonException, is java.io.EOFException -> IllegalArgumentException("That file is not valid JSON.")
                 is IllegalStateException, is ClassCastException -> IllegalArgumentException(NOT_BACKUP)
                 else -> e

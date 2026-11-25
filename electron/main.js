@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, powerMonitor, protocol, session, shell, Tray } from 'electron';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -143,8 +143,11 @@ app.whenReady().then(() => {
     if (prefs.background && !quitting) {
       e.preventDefault();
       win.hide();
+      // Hidden to the tray, the page keeps running; locked notes should not stay open behind it.
+      win.webContents.send('lock-notes');
     }
   });
+  for (const ev of ['lock-screen', 'suspend']) powerMonitor.on(ev, () => win?.webContents.send('lock-notes'));
   setTray(prefs.background);
   void win.loadURL('app://notes/index.html');
 });

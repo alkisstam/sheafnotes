@@ -1,12 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bell, BellOff, Download, FileClock, FolderPlus, HardDrive, Laptop, Moon, QrCode, RefreshCw, Sun, Upload, X } from 'lucide-react';
+import { Bell, BellOff, Download, FileClock, Lock, LockKeyhole, FolderPlus, HardDrive, Laptop, Moon, QrCode, RefreshCw, Sun, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { autoBackupSupported, chooseBackupFile, exportBackup, importBackup, stopAutoBackup } from '../lib/backup';
+import { autoBackupEncrypted, autoBackupSupported, chooseBackupFile, exportBackup, importBackup, NeedsPassword, setAutoBackupPassword, stopAutoBackup } from '../lib/backup';
+import { WrongPassword } from '../lib/crypto';
+import { askToUnlock, changePassword, LOCK_AFTER_DEFAULT, localVault, lockNow, setLockAfter } from '../lib/lock';
 import { relativeTime } from '../lib/dates';
 import { db } from '../lib/db';
 import { formatBytes } from '../lib/pdf';
 import { foldQuery } from '../lib/search';
-import { useStore, type DialogState, type ThemePref } from '../lib/store';
+import { store, useStore, type DialogState, type ThemePref } from '../lib/store';
 import { disableServerSync, enableServerSync, syncNow } from '../lib/sync';
 import { changeTags, createNotebook, patchNotes } from '../lib/actions';
 import { HUES, noteBg, PALETTES } from '../lib/colors';
@@ -70,6 +72,60 @@ function Prompt({ dialog, close }: { dialog: Extract<DialogState, { kind: 'promp
         <footer>
           <button type="button" className="btn" onClick={close}>Cancel</button>
           <button type="submit" className="btn primary" disabled={!value.trim() && !dialog.allowEmpty}>{dialog.confirm}</button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
+function PasswordDialog({ dialog, close }: { dialog: Extract<DialogState, { kind: 'password' }>; close: () => void }) {
+  const [current, setCurrent] = useState('');
+  const [pw, setPw] = useState('');
+  const [again, setAgain] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const mismatch = dialog.repeat && again && pw !== again;
+  const ready = pw && (!dialog.repeat || pw === again) && (!dialog.current || current) && !busy;
+  const cancel = () => {
+    if (busy) return;
+    dialog.onCancel?.();
+    close();
+  };
+  return (
+    <Modal title={dialog.title} onClose={cancel}>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!ready) return;
+          setBusy(true);
+          setError(null);
+          const err = await dialog.onSubmit(pw, current).catch((x: Error) => x.message);
+          setBusy(false);
+          if (err) setError(err);
+          else close();
+        }}
+      >
+        {dialog.body && <p className="dialog-hint">{dialog.body}</p>}
+        {dialog.current && (
+          <label className="field">
+            <span>Current password</span>
+            <input type="password" autoFocus autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+          </label>
+        )}
+        <label className="field">
+          <span>{dialog.current ? 'New password' : 'Password'}</span>
+          <input type="password" autoFocus={!dialog.current} autoComplete={dialog.repeat ? 'new-password' : 'current-password'} value={pw} onChange={(e) => setPw(e.target.value)} />
+        </label>
+        {dialog.repeat && (
+          <label className="field">
+            <span>Repeat password</span>
+            <input type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} />
+          </label>
+        )}
+        {(error || mismatch) && <p className="dialog-error" role="alert">{error ?? 'The passwords do not match.'}</p>}
+        <footer>
+          <button type="button" className="btn" onClick={cancel} disabled={busy}>Cancel</button>
+          <button type="submit" className="btn primary" disabled={!ready}>{busy ? 'Working…' : dialog.confirm}</button>
         </footer>
       </form>
     </Modal>
@@ -204,8 +260,95 @@ function Settings({ close }: { close: () => void }) {
   const autoBackup = useLiveQuery(async () => {
     const handle = (await db.meta.get('backupFile'))?.value as FileSystemFileHandle | undefined;
     const at = (await db.meta.get('backupWrittenTime'))?.value as number | undefined;
-    return handle ? { name: handle.name, at } : null;
+    return handle ? { name: handle.name, at, encrypted: await autoBackupEncrypted() } : null;
   }, []);
+  const lock = useLiveQuery(async () => ({
+    set: Boolean(await localVault()),
+    after: ((await db.meta.get('lockAfter'))?.value as number | undefined) ?? LOCK_AFTER_DEFAULT,
+    count: await db.notes.filter((n) => Boolean(n.locked) && !n.trashedAt).count(),
+  }), []);
+  const unlocked = useStore((s) => s.unlocked);
+
+  const restore = async (file: File, password?: string): Promise<void> => {
+    try {
+      const { added, updated, skipped } = await importBackup(file, { password });
+      showToast({ message: `Restored: ${added} added, ${updated} updated, ${skipped} already current.` });
+      await syncNow(true);
+    } catch (err) {
+      if (!(err instanceof NeedsPassword)) return showToast({ message: (err as Error).message });
+      store.getState().setDialog({
+        kind: 'password',
+        title: 'Restore encrypted backup',
+        body: `Enter the password ${file.name} was encrypted with.`,
+        confirm: 'Restore',
+        onSubmit: async (pw) => {
+          try {
+            const { added, updated, skipped } = await importBackup(file, { password: pw });
+            showToast({ message: `Restored: ${added} added, ${updated} updated, ${skipped} already current.` });
+            void syncNow(true);
+            return null;
+          } catch (e) {
+            return e instanceof WrongPassword ? 'Wrong password, or the file is damaged.' : (e as Error).message;
+          }
+        },
+      });
+    }
+  };
+
+  const exportEncrypted = () =>
+    store.getState().setDialog({
+      kind: 'password',
+      title: 'Export encrypted backup',
+      body: 'The backup is encrypted with AES-256, using a key made from this password. Keep the password safe: without it the backup cannot be restored.',
+      repeat: true,
+      confirm: 'Export',
+      onSubmit: async (pw) => {
+        try {
+          await exportBackup(pw);
+          return null;
+        } catch {
+          return 'The backup could not be created.';
+        }
+      },
+    });
+
+  const toggleBackupEncryption = () => {
+    if (autoBackup?.encrypted) {
+      void setAutoBackupPassword(null).then(() => syncNow(true));
+      return;
+    }
+    store.getState().setDialog({
+      kind: 'password',
+      title: 'Encrypt the auto-backup file',
+      body: 'This device keeps a key made from the password, not the password itself. On your other computers, enter the same password when asked.',
+      repeat: true,
+      confirm: 'Encrypt',
+      onSubmit: async (pw) => {
+        await setAutoBackupPassword(pw);
+        void syncNow(true);
+        return null;
+      },
+    });
+  };
+
+  const changeLockPassword = () =>
+    store.getState().setDialog({
+      kind: 'password',
+      title: 'Change password',
+      body: 'Locked notes stay locked. Other devices use the new password once they sync.',
+      current: true,
+      repeat: true,
+      confirm: 'Change',
+      onSubmit: async (pw, cur) => {
+        try {
+          await changePassword(cur, pw);
+          showToast({ message: 'Password changed' });
+          return null;
+        } catch (e) {
+          return e instanceof WrongPassword ? 'The current password is not right.' : (e as Error).message;
+        }
+      },
+    });
   const sync = useLiveQuery(async () => {
     const on = !!(await db.meta.get('syncToken'))?.value;
     const at = (await db.meta.get('syncedAt'))?.value as number | undefined;
@@ -270,6 +413,9 @@ function Settings({ close }: { close: () => void }) {
           >
             <Download size={14} /> Export backup
           </button>
+          <button type="button" className="btn" onClick={exportEncrypted}>
+            <LockKeyhole size={14} /> Export encrypted
+          </button>
           <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
             <Upload size={14} /> Restore backup
           </button>
@@ -289,29 +435,23 @@ function Settings({ close }: { close: () => void }) {
             ref={fileRef}
             hidden
             type="file"
-            accept="application/json,.json"
+            accept="application/json,.json,.sheafenc"
             aria-label="Backup file"
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = '';
-              if (!file) return;
-              void importBackup(file)
-                .then(async ({ added, updated, skipped }) => {
-                  showToast({ message: `Restored: ${added} added, ${updated} updated, ${skipped} already current.` });
-                  await syncNow(true);
-                })
-                .catch((err: Error) => showToast({ message: err.message }));
+              if (file) void restore(file);
             }}
           />
         </div>
-        <p className="dialog-hint">Restoring merges with what is here. If a note exists in both, the newer copy wins.</p>
+        <p className="dialog-hint">Restoring merges with what is here. If a note exists in both, the newer copy wins. Encrypted backups use AES-256 with a key made from your password; without the password they cannot be restored.</p>
         {autoBackupSupported && (
           <>
             <p className="settings-stat">
               <FileClock size={14} />
               <span>
                 {autoBackup
-                  ? `Auto-backup to ${autoBackup.name}${autoBackup.at ? `, last saved ${relativeTime(autoBackup.at)}` : ''}.`
+                  ? `Auto-backup to ${autoBackup.name}${autoBackup.encrypted ? ', encrypted' : ''}${autoBackup.at ? `, last saved ${relativeTime(autoBackup.at)}` : ''}.`
                   : 'Auto-backup is off.'}
               </span>
             </p>
@@ -326,6 +466,11 @@ function Settings({ close }: { close: () => void }) {
                 <FileClock size={14} /> {autoBackup ? 'Change file' : 'Auto-backup to a file'}
               </button>
               {autoBackup && (
+                <button type="button" className="btn" onClick={toggleBackupEncryption}>
+                  <LockKeyhole size={14} /> {autoBackup.encrypted ? 'Stop encrypting' : 'Encrypt file'}
+                </button>
+              )}
+              {autoBackup && (
                 <button type="button" className="btn" onClick={() => void stopAutoBackup()}>
                   Stop
                 </button>
@@ -336,6 +481,43 @@ function Settings({ close }: { close: () => void }) {
             </p>
           </>
         )}
+      </section>
+
+      <section className="settings-section">
+        <h3>Locked notes</h3>
+        <p className="settings-stat">
+          <Lock size={14} />
+          <span>
+            {!lock ? '…' : !lock.set ? 'No password is set. Choose Lock note in a note\'s menu to set one.' : `${lock.count} locked ${lock.count === 1 ? 'note' : 'notes'}. ${unlocked ? 'Unlocked for now.' : 'Locked.'}`}
+          </span>
+        </p>
+        <div className="settings-row">
+          {lock?.set ? (
+            <>
+              {unlocked ? (
+                <button type="button" className="btn" onClick={() => void lockNow()}><Lock size={14} /> Lock now</button>
+              ) : (
+                <button type="button" className="btn" onClick={() => void askToUnlock()}>Unlock</button>
+              )}
+              <button type="button" className="btn" onClick={changeLockPassword}>Change password</button>
+            </>
+          ) : (
+            <button type="button" className="btn" onClick={() => void askToUnlock()}>Set password</button>
+          )}
+          <label className="settings-inline">
+            <span>Lock again after</span>
+            <select value={lock?.after ?? LOCK_AFTER_DEFAULT} onChange={(e) => void setLockAfter(Number(e.target.value))}>
+              <option value={1}>1 minute</option>
+              <option value={5}>5 minutes</option>
+              <option value={15}>15 minutes</option>
+              <option value={60}>1 hour</option>
+              <option value={0}>Only when I lock</option>
+            </select>
+          </label>
+        </div>
+        <p className="dialog-hint">
+          Locked notes are encrypted with AES-256. Their titles, tags and notebooks stay visible, and their attached PDFs and images are not encrypted. If you forget the password, locked notes cannot be recovered.
+        </p>
       </section>
 
       <section className="settings-section">
@@ -596,6 +778,7 @@ export function Dialogs() {
   if (dialog.kind === 'bulkTags') return <BulkTags dialog={dialog} close={close} />;
   if (dialog.kind === 'pickNote') return <PickNote dialog={dialog} close={close} />;
   if (dialog.kind === 'prompt') return <Prompt key={dialog.title} dialog={dialog} close={close} />;
+  if (dialog.kind === 'password') return <PasswordDialog key={dialog.title} dialog={dialog} close={close} />;
   return (
     <Modal title={dialog.title} onClose={close}>
       {dialog.body && <p>{dialog.body}</p>}

@@ -1,4 +1,5 @@
 import { collectOrphanFiles, flushEditor } from './actions';
+import { decryptBlob, deriveKey, encryptBlob, isEncryptedBackup, newBackupHeader, random, readBackupHeader, unb64, WrongPassword } from './crypto';
 import { db, getMeta, setMeta } from './db';
 import { dateKey } from './dates';
 import { saveBlob } from './pdf';
@@ -59,9 +60,31 @@ const warnIfTooLarge = (size: number) => {
   });
 };
 
-export async function exportBackup() {
+/** Thrown when a backup is encrypted and no password or key was given. */
+export class NeedsPassword extends Error {
+  constructor() {
+    super('This backup is encrypted. Enter its password to restore it.');
+  }
+}
+
+/** Encrypts a backup with a key derived from the password and a fresh salt. */
+export async function encryptBackup(backup: Blob, password: string): Promise<Blob> {
+  const salt = random(16);
+  const header = newBackupHeader(salt);
+  return encryptBlob(backup, await deriveKey(password, salt, header.iterations), header);
+}
+
+/** The backup JSON in an encrypted backup. Throws WrongPassword. */
+export async function decryptBackup(file: Blob, password: string): Promise<Blob> {
+  const { header } = await readBackupHeader(file);
+  return decryptBlob(file, await deriveKey(password, unb64(header.salt), header.iterations));
+}
+
+/** Saves a backup file; with a password, an encrypted one. */
+export async function exportBackup(password?: string) {
   const backup = await buildBackup();
-  saveBlob(backup, `sheaf-notes-backup-${dateKey()}.json`);
+  if (password) saveBlob(await encryptBackup(backup, password), `sheaf-notes-backup-${dateKey()}.sheafenc`);
+  else saveBlob(backup, `sheaf-notes-backup-${dateKey()}.json`);
   warnIfTooLarge(backup.size);
 }
 
@@ -149,8 +172,14 @@ interface BackupFile {
   images?: (Omit<NoteImage, 'blob'> & { type: string; data: string })[];
 }
 
-/** Merges a backup file into this device. */
-export async function importBackup(file: File): Promise<MergeResult> {
+/** Merges a backup file into this device. An encrypted one needs its password, or the key derived from it. */
+export async function importBackup(input: Blob, secret?: { password?: string; key?: CryptoKey }): Promise<MergeResult> {
+  let file = input;
+  if (await isEncryptedBackup(file)) {
+    if (secret?.key) file = await decryptBlob(file, secret.key);
+    else if (secret?.password) file = await decryptBackup(file, secret.password);
+    else throw new NeedsPassword();
+  }
   if (file.size > MAX_RESTORE_BYTES) throw new Error('That backup is too large for this browser to restore.');
   let data: BackupFile;
   try {
@@ -191,13 +220,73 @@ export async function chooseBackupFile() {
   const picker = (window as unknown as { showSaveFilePicker(o: object): Promise<BackupHandle> }).showSaveFilePicker;
   const handle = await picker({
     suggestedName: 'sheaf-notes-backup.json',
-    types: [{ description: 'Sheaf Notes backup', accept: { 'application/json': ['.json'] } }],
+    types: [{ description: 'Sheaf Notes backup', accept: { 'application/json': ['.json'], 'application/octet-stream': ['.sheafenc'] } }],
   });
   await setMeta('backupFile', handle);
   await setMeta('backupWrittenAt', 0);
 }
 
-export const stopAutoBackup = () => Promise.all([setMeta('backupFile', undefined), setMeta('backupWrittenAt', undefined)]);
+export const stopAutoBackup = () =>
+  Promise.all([setMeta('backupFile', undefined), setMeta('backupWrittenAt', undefined), setMeta('backupKey', undefined)]);
+
+/** Key for an encrypted auto-backup file. The CryptoKey cannot be exported, and the password itself is never stored. */
+interface BackupKey {
+  key: CryptoKey;
+  salt: string;
+  iterations: number;
+}
+
+export const autoBackupEncrypted = async () => Boolean(await getMeta<BackupKey>('backupKey'));
+
+async function storeBackupKey(password: string, salt: Uint8Array<ArrayBuffer>, iterations: number) {
+  const key = await deriveKey(password, salt, iterations);
+  await setMeta('backupKey', { key, salt: newBackupHeader(salt, iterations).salt, iterations } satisfies BackupKey);
+}
+
+/** Turns encryption of the auto-backup file on with this password, or off with null. The next write applies it. */
+export async function setAutoBackupPassword(password: string | null) {
+  if (password === null) await setMeta('backupKey', undefined);
+  else {
+    const header = newBackupHeader(random(16));
+    await storeBackupKey(password, unb64(header.salt), header.iterations);
+  }
+}
+
+let askedForFilePassword = false;
+
+/** The file was encrypted elsewhere, with a password this device has not been given. */
+function askForFilePassword(file: Blob, onResume: () => void) {
+  if (askedForFilePassword) return;
+  askedForFilePassword = true;
+  const s = store.getState();
+  s.showToast({
+    message: 'The auto-backup file is encrypted. Auto-backup is paused until you enter its password.',
+    sticky: true,
+    action: {
+      label: 'Enter password',
+      run: () =>
+        s.setDialog({
+          kind: 'password',
+          title: 'Auto-backup file password',
+          body: 'Enter the password the auto-backup file was encrypted with on your other device.',
+          confirm: 'Continue',
+          onCancel: () => (askedForFilePassword = false),
+          onSubmit: async (pw) => {
+            const { header } = await readBackupHeader(file);
+            try {
+              await decryptBackup(file, pw);
+            } catch (e) {
+              return e instanceof WrongPassword ? 'That password is not right.' : (e as Error).message;
+            }
+            await storeBackupKey(pw, unb64(header.salt), header.iterations);
+            askedForFilePassword = false;
+            onResume();
+            return null;
+          },
+        }),
+    },
+  });
+}
 
 let askedToResume = false;
 
@@ -226,16 +315,33 @@ export async function pullFromFile(onResume: () => void): Promise<boolean> {
   if (!handle) return false;
   const file = await handle.getFile();
   if (!file.size || file.lastModified <= ((await getMeta<number>('backupWrittenAt')) ?? 0)) return false;
-  const r = await importBackup(file);
+  let key: CryptoKey | undefined;
+  if (await isEncryptedBackup(file)) {
+    const stored = await getMeta<BackupKey>('backupKey');
+    const { header } = await readBackupHeader(file);
+    if (!stored || stored.salt !== header.salt) {
+      askForFilePassword(file, onResume);
+      return false;
+    }
+    key = stored.key;
+  }
+  const r = await importBackup(file, { key });
   return r.added + r.updated + r.deleted > 0;
 }
 
 export async function pushToFile(onResume: () => void) {
   const handle = await backupHandle(onResume);
   if (!handle) return;
+  const stored = await getMeta<BackupKey>('backupKey');
+  // Another device encrypted the file with a password this one lacks; overwriting it would undo their changes.
+  const cur = await handle.getFile();
+  if (cur.size && cur.lastModified > ((await getMeta<number>('backupWrittenAt')) ?? 0) && (await isEncryptedBackup(cur))) {
+    if (!stored || stored.salt !== (await readBackupHeader(cur)).header.salt) return;
+  }
   const backup = await buildBackup();
+  const out = stored ? await encryptBlob(backup, stored.key, newBackupHeader(unb64(stored.salt), stored.iterations)) : backup;
   const w = await handle.createWritable();
-  await w.write(backup);
+  await w.write(out);
   await w.close();
   await setMeta('backupWrittenAt', (await handle.getFile()).lastModified);
   await setMeta('backupWrittenTime', Date.now());

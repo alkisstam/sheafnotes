@@ -98,6 +98,7 @@ fun NoteScreen(
     val notebooks by app.db.dao().liveNotebooks().collectAsStateWithLifecycle(emptyList())
     val path = remember(live, notebooks, note?.parentId, note?.notebookId) { note?.let { notePath(it, live, notebooks).toString() } }
     val view = remember(id) { NoteViewState() }
+    val unlocked by app.lock.unlocked.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
     // Queued behind the page's last save, so an empty check sees what was typed.
@@ -162,7 +163,9 @@ fun NoteScreen(
         ) { pad ->
             note?.let { n ->
                 Column(Modifier.padding(pad).consumeWindowInsets(pad).fillMaxSize().imePadding()) {
-                    NoteView(app, n, view, pdf, path, remember(live, id) { linkedReminder(live, id)?.let { noteRemindAt(JSONObject(it.raw)) } }, Modifier.weight(1f).fillMaxWidth())
+                    val openable = remember(n.raw, unlocked) { app.lock.isOpenable(n) }
+                    if (!openable) LockedPanel(app, Modifier.weight(1f))
+                    else NoteView(app, n, view, pdf, path, remember(live, id) { linkedReminder(live, id)?.let { noteRemindAt(JSONObject(it.raw)) } }, Modifier.weight(1f).fillMaxWidth())
                 }
             }
         }
@@ -205,6 +208,8 @@ fun NoteMenu(
     var coloring by remember { mutableStateOf(false) }
     var exporting by remember { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
+    // A lock action waiting on the password dialog.
+    var unlocking by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
     val notebooks by app.db.dao().liveNotebooks().collectAsStateWithLifecycle(emptyList())
     val act = { block: suspend () -> Unit -> onDismiss(); before { app.scope.launch { block() } } }
     val items: @Composable () -> Unit = {
@@ -229,6 +234,22 @@ fun NoteMenu(
         MenuItem(if (linkedReminder(live, id) != null) "Edit reminder" else "Add reminder", { onDismiss(); before { onRemind(id) } }, R.drawable.ic_bell)
         if (onShare != null) MenuItem("Share", { onDismiss(); sharing = true }, R.drawable.ic_share_2)
         if (onExport != null) MenuItem("Export", { onDismiss(); exporting = true }, R.drawable.ic_download)
+        if (note.kind == "note") {
+            val locked = note.isLocked
+            MenuItem(if (locked) "Remove lock" else "Lock note", {
+                onDismiss()
+                val run: suspend () -> Unit = {
+                    try {
+                        if (locked) app.lock.removeLock(id) else app.lock.lockNote(id)
+                        withContext(Dispatchers.Main) { Toast.makeText(context, if (locked) "Lock removed" else "Note locked", Toast.LENGTH_SHORT).show() }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) { Toast.makeText(context, e.message ?: "That did not work.", Toast.LENGTH_LONG).show() }
+                    }
+                }
+                val ready = if (locked) app.lock.isOpenable(note) else app.lock.canLock()
+                before { if (ready) app.scope.launch { run() } else unlocking = run }
+            }, if (locked) R.drawable.ic_lock_open else R.drawable.ic_lock)
+        }
         MenuItem("Move to Trash", {
             onDismiss()
             before { app.scope.launch { app.trashNote(id) }; onTrashed() }
@@ -242,6 +263,12 @@ fun NoteMenu(
             }
         }
     } else Menu(expanded, onDismiss) { items() }
+    unlocking?.let { job ->
+        UnlockDialog(app) { ok ->
+            unlocking = null
+            if (ok) app.scope.launch { job() }
+        }
+    }
     if (coloring) ColorPicker(JSONObject(note.raw).optString("color"), { color ->
         before { app.scope.launch { app.updateNote(id) { j, _ -> j.put("color", color ?: JSONObject.NULL) } } }
     }) { coloring = false }

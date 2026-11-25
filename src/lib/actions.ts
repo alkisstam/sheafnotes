@@ -1,7 +1,8 @@
 import type { JSONContent } from '@tiptap/core';
 import { db, uid } from './db';
 import { dateKey, longDate } from './dates';
-import { docText, emptyDoc, imageIdsIn, pdfIdsIn } from './doc';
+import { docText, emptyDoc } from './doc';
+import { noteFileIds, saveLockedContent } from './lock';
 import { formatAt, linkedReminder, nextRepeat, type ReminderItem } from './reminders';
 import { store, type ReminderEdit } from './store';
 import { renameTagIn } from './tags';
@@ -122,7 +123,15 @@ export async function changeTags(ids: string[], add: string[], remove: string[])
 const JOURNAL = 'cn.journal';
 type Journal = { id: string; at: number; title?: string; content?: JSONContent };
 
+/** The Android app turns the journal off while a locked note is open, since it writes in the clear. */
+let journalOff = false;
+export const setJournalOff = (off: boolean) => {
+  journalOff = off;
+  if (off) clearJournal();
+};
+
 export function journalEdit(id: string, patch: { title?: string; content?: JSONContent }) {
+  if (journalOff) return;
   try {
     const list: Journal[] = JSON.parse(localStorage.getItem(JOURNAL) ?? '[]');
     list.push({ id, at: Date.now(), ...patch });
@@ -150,7 +159,7 @@ export async function recoverJournal() {
   for (const entry of list) {
     const note = await db.notes.get(entry.id);
     // Skip it if the note has been edited since, for example in another tab.
-    if (!note || note.updatedAt > entry.at) continue;
+    if (!note || note.updatedAt > entry.at || note.locked) continue;
     const patch: Partial<Note> = { updatedAt: entry.at };
     if (entry.title !== undefined) patch.title = entry.title;
     if (entry.content) {
@@ -172,6 +181,8 @@ export async function editTags(id: string, change: (tags: string[]) => string[])
 }
 
 export async function saveContent(id: string, content: JSONContent, writer: string) {
+  const note = await db.notes.get(id);
+  if (note?.locked) return saveLockedContent(note, content, writer);
   await db.notes.update(id, { content, text: docText(content), writer, updatedAt: Date.now() });
 }
 
@@ -219,13 +230,13 @@ export async function collectOrphanFiles() {
   // A file just dropped into a note, in this tab or another, is saved before the note is; give the note time to catch up.
   const before = Date.now() - 5 * 60_000;
   const notes = await db.notes.toArray();
-  const used = new Set(notes.flatMap((n) => pdfIdsIn(n.content)));
+  // One set for both: ids are UUIDs, and a locked note only lists them together.
+  const used = new Set(notes.flatMap(noteFileIds));
   const ids = (await db.files.where('createdAt').below(before).primaryKeys()) as string[];
   const orphans = ids.filter((id) => !used.has(id));
   await db.files.bulkDelete(orphans);
   await db.blobs.bulkDelete(orphans);
-  const usedImages = new Set(notes.flatMap((n) => imageIdsIn(n.content)));
-  await db.images.filter((i) => i.createdAt < before && !usedImages.has(i.id)).delete();
+  await db.images.filter((i) => i.createdAt < before && !used.has(i.id)).delete();
 }
 
 export async function deleteForever(ids: string[]) {
@@ -241,7 +252,7 @@ export async function deleteForever(ids: string[]) {
 export async function duplicateNote(id: string, open = true) {
   flushEditor();
   const src = await db.notes.get(id);
-  if (!src) return;
+  if (!src || src.locked) return;
   const content: JSONContent = structuredClone(src.content);
   // Copies are separate tasks, so they need ids of their own.
   const rekey = (n: JSONContent) => {

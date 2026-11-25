@@ -1,5 +1,11 @@
 # Changelog — Android app
 
+## Unreleased
+
+### Added
+- Lock note in a note's menu encrypts its content with AES-256, under one password for the whole app, the same one as on the web app. Titles, tags and notebooks stay visible. Locked notes lock again when the app has been away longer than the time set in Settings → Locked notes.
+- Export encrypted in Settings → Backup saves a backup encrypted with AES-256-GCM and a password (PBKDF2-SHA256). Import asks for the password, and opens encrypted backups made on the web app too.
+
 ## 1.6.1 — 2026-11-23
 
 ### Added

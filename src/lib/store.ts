@@ -44,7 +44,20 @@ export type DialogState =
   | { kind: 'export'; noteIds: string[]; mode: ExportMode }
   | { kind: 'pickNotebook'; onPick: (id: string | null) => void }
   | { kind: 'bulkTags'; noteIds: string[]; common: string[]; allTags: string[] }
-  | { kind: 'pickNote'; onPick: (id: string, title: string) => void; onUnlink?: () => void };
+  | { kind: 'pickNote'; onPick: (id: string, title: string) => void; onUnlink?: () => void }
+  | {
+      kind: 'password';
+      title: string;
+      body?: string;
+      /** Ask for the current password too, as when changing it. */
+      current?: boolean;
+      /** Ask twice, as when choosing a new password. */
+      repeat?: boolean;
+      confirm: string;
+      /** Resolves to an error to show, or null to close. */
+      onSubmit: (password: string, current: string) => Promise<string | null>;
+      onCancel?: () => void;
+    };
 
 /** The reminder open in the editor pane: an existing one ([id]), a new one (maybe [attach]ed to a note), or a to-do's. */
 export interface ReminderEdit {
@@ -74,6 +87,8 @@ interface State {
   focusTitle: boolean;
   toast: Toast | null;
   dialog: DialogState | null;
+  /** Whether locked notes can be opened in this session. */
+  unlocked: boolean;
   /** Null outside select mode. */
   selected: string[] | null;
   /** Notes opened before and after the current one, most recent last. */
@@ -134,6 +149,7 @@ export const useStore = create<State>((set, get) => ({
   focusTitle: false,
   toast: null,
   dialog: null,
+  unlocked: false,
   selected: null,
   back: [],
   fwd: [],

@@ -9,7 +9,7 @@ import './styles/pdf.css';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { flushEditor, patchNote } from './lib/actions';
+import { flushEditor, patchNote, setJournalOff } from './lib/actions';
 import { db, uid, writeListeners } from './lib/db';
 import { imageIdsIn, pdfIdsIn } from './lib/doc';
 import { blobSaver } from './lib/pdf';
@@ -37,6 +37,8 @@ interface Payload {
   path?: Path;
   /** The attached reminder's time, for the bell pill. */
   remindAt?: string | null;
+  /** The note is locked in the app, and arrives decrypted. */
+  secret?: boolean;
 }
 
 interface Path {
@@ -331,7 +333,9 @@ w.cnClosePdf = () => store.getState().setPdf(null);
 w.cnAck = () => acks.shift()?.();
 
 // Called by the app on open and whenever its copy changes. The page's own database is only a cache for this note.
-w.cnLoad = async ({ note, images, files, dark, deviceFonts, pdf, path, remindAt }) => {
+w.cnLoad = async ({ note, images, files, dark, deviceFonts, pdf, path, remindAt, secret }) => {
+  // A locked note arrives decrypted; keep it out of the plaintext journal.
+  setJournalOff(Boolean(secret));
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   const fonts: [string, string][] = [['--font-ui', 'sans-serif'], ['--font-text', 'serif'], ['--font-mono', 'monospace']];
   for (const [name, value] of fonts) {

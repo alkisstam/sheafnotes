@@ -464,7 +464,7 @@ fun NoteList(
                                             }).padding(if (sub) 12.dp else 14.dp).padding(end = if (selecting) 26.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 NoteTitle(note, hasKids, note.id !in shutNotes, { toggle(note.id) }, if (sub) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium)
                                                 Text(
-                                                    note.text.take(400).ifBlank { "No content yet" },
+                                                    if (note.isLocked) "Locked" else note.text.take(400).ifBlank { "No content yet" },
                                                     style = if (sub) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                                                     color = if (bg != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                                                     minLines = if (sub) 4 else 6,
@@ -497,7 +497,7 @@ fun NoteList(
                             }).padding(start = 16.dp, top = 12.dp, end = if (selecting) 44.dp else 16.dp, bottom = 12.dp)) {
                                 NoteTitle(note, hasKids, note.id !in shutNotes, { toggle(note.id) }, MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    note.text.replace('\n', ' ').take(170).ifBlank { "No content yet" },
+                                    if (note.isLocked) "Locked" else note.text.replace('\n', ' ').take(170).ifBlank { "No content yet" },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (bg != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 2,
@@ -730,6 +730,7 @@ private fun NoteTitle(note: NoteRow, hasKids: Boolean, open: Boolean, onToggle: 
         }
         Text(note.title.ifBlank { "Untitled" }, Modifier.weight(1f, fill = false), style = style, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (note.pinned) Icon(painterResource(R.drawable.ic_pin), "Pinned", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+        if (note.isLocked) Icon(painterResource(R.drawable.ic_lock), "Locked", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
 @Composable

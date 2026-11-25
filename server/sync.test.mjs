@@ -44,6 +44,13 @@ test('sync keeps the newest record, returns changes since a seq, and stores blob
     assert.equal((await fetch(`${base}/blob/p1`, { method: 'HEAD', headers })).status, 404, 'an unused PDF is dropped');
     assert.equal((await fetch(`${base}/blob/x1`, { method: 'HEAD', headers })).status, 200, 'fresh bytes without a record are kept');
 
+    await fetch(`${base}/blob/p2`, { method: 'PUT', headers, body: 'pdf' });
+    await sync(0, [
+      { table: 'files', id: 'p2', time: 1, data: { id: 'p2' } },
+      { table: 'notes', id: 'n2', time: 500, data: { content: { type: 'doc', content: [] }, locked: { v: 1 }, fileIds: ['p2'] } },
+    ]);
+    assert.equal((await fetch(`${base}/blob/p2`, { method: 'HEAD', headers })).status, 200, 'a locked note keeps the PDFs it lists');
+
     const [older, newer] = await Promise.all([
       sync(0, [{ table: 'notes', id: 'n9', time: 100, data: { v: 'older' } }]),
       sync(0, [{ table: 'notes', id: 'n9', time: 200, data: { v: 'newer' } }]),
@@ -56,7 +63,7 @@ test('sync keeps the newest record, returns changes since a seq, and stores blob
     const again = await startServer({ token: 't', dir });
     const port = again.address().port;
     const d = await fetch(`http://127.0.0.1:${port}/api/sync`, { method: 'POST', headers, body: JSON.stringify({ since: 0, records: [] }) }).then((r) => r.json());
-    assert.deepEqual(d.records.map((r) => r.table).sort(), ['notes', 'notes', 'tombstones'], 'state survives a restart, deleted note content does not');
+    assert.deepEqual(d.records.map((r) => r.table).sort(), ['files', 'notes', 'notes', 'tombstones'], 'state survives a restart, deleted note content does not');
     again.close();
   } finally {
     server.close();

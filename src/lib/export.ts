@@ -1,6 +1,7 @@
 import { flushEditor } from './actions';
 import { toBase64 } from './backup';
 import { db } from './db';
+import { askToUnlock, decryptNote, isOpenable } from './lock';
 import { saveBlob } from './pdf';
 import { store } from './store';
 import type { Note } from './types';
@@ -117,8 +118,11 @@ async function shareBlob(blob: Blob, name: string) {
 
 async function run(ids: string[], format: ExportFormat, mode: ExportMode) {
   flushEditor();
-  const notes = (await db.notes.bulkGet(ids)).filter((n): n is Note => Boolean(n));
+  let notes = (await db.notes.bulkGet(ids)).filter((n): n is Note => Boolean(n));
   if (!notes.length) return;
+  // Locked notes are exported as they read, so the session must be unlocked.
+  if (notes.some((n) => !isOpenable(n)) && !(await askToUnlock())) return;
+  notes = await Promise.all(notes.map(async (n) => (n.locked ? { ...n, ...(await decryptNote(n)), locked: null, fileIds: null } : n)));
   const name = exportName(notes.length === 1 ? notes[0].title : batchName(notes.length), format);
   const deliver = async (text: string, type: string) => {
     const blob = new Blob([text], { type });
